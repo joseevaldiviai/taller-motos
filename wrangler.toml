@@ -1,0 +1,12 @@
+name = "taller-motos-worker"
+main = "worker/src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+SUPABASE_URL = ""
+SUPABASE_SERVICE_KEY = ""
+JWT_SECRET = ""
+VAPID_PUBLIC_KEY = ""
+VAPID_PRIVATE_KEY = ""
+VAPID_SUBJECT = "admin@taller.local"

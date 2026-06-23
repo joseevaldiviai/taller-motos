@@ -1,0 +1,39 @@
+{
+  "name": "taller-motos",
+  "version": "1.0.0",
+  "author": "Jose Valdivia Ignacio",
+  "description": "Sistema de gestión para taller de motos",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev:worker": "wrangler dev worker/src/index.js --port 8787",
+    "deploy:worker": "wrangler deploy worker/src/index.js",
+    "deploy:pages": "vite build",
+    "generate:vapid": "npx web-push generate-vapid-keys"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.0",
+    "date-fns": "^4.1.0",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.3",
+    "xlsx": "^0.18.5",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "lucide-react": "^0.454.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^6.27.0",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "vite": "^5.4.10",
+    "wrangler": "^4.57.1"
+  }
+}

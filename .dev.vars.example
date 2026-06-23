@@ -1,0 +1,9 @@
+# Worker — Cloudflare (desarrollo local)
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...service_role...
+JWT_SECRET=una-clave-secreta-larga-aleatoria-minimo-32-chars
+
+# VAPID — generar con: npx web-push generate-vapid-keys
+VAPID_PUBLIC_KEY=BNHxxxxxxxx...
+VAPID_PRIVATE_KEY=xxxxxxxx...
+VAPID_SUBJECT=admin@taller.local
