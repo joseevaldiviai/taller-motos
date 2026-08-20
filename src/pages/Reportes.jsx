@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { FileText, TrendingUp, Users, Package, Wrench, BarChart2, RefreshCw, FileSpreadsheet, ChevronDown, UserCheck } from 'lucide-react'
 import { api } from '../lib/apiClient'
 import useAuthStore from '../store/authStore'
@@ -70,6 +70,91 @@ function MiniBar({ pct, color }) {
   return (
     <div style={{ height:6, borderRadius:3, background:`${color}25`, overflow:'hidden' }}>
       <div style={{ height:'100%', width:`${Math.min(pct,100)}%`, background:color, borderRadius:3 }} />
+    </div>
+  )
+}
+
+function MechanicosConDetalle({ mecanicos }) {
+  const [expanded, setExpanded] = useState(null)
+  const SL = { MANTENIMIENTO_BASICO:'Mant. Básico', MANTENIMIENTO_COMPLETO:'Mant. Completo', CAMBIO_ACEITE:'Cambio Aceite', REPARACION_TELESCOPIO:'Rep. Telescopio' }
+
+  return (
+    <div>
+      <div style={{ overflowX:'auto' }}>
+        <table style={s.table}>
+          <thead><tr>
+            <th style={s.th}>Mecanico</th>
+            <th style={s.th}>Tipo Sueldo</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Asignadas</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Finalizadas</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Servicios</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Reemplazos</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Externos</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Costo</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Margen</th>
+            <th style={{ ...s.th, textAlign:'right' }}>Total</th>
+            <th style={s.th}></th>
+          </tr></thead>
+          <tbody>
+            {mecanicos.map(m => (
+              <React.Fragment key={m.id}>
+                <tr style={{ cursor: m.detalle?.length ? 'pointer' : 'default' }}
+                    onClick={() => m.detalle?.length && setExpanded(expanded === m.id ? null : m.id)}>
+                  <td style={{ ...s.td, fontWeight:600 }}>{m.nombre}</td>
+                  <td style={s.td}><span style={s.badge(m.tipo_sueldo==='FIJO'?'#10b981':'#8b5cf6')}>{m.tipo_sueldo||'--'}</span></td>
+                  <td style={{ ...s.td, textAlign:'right' }}>{m.cards_asignadas}</td>
+                  <td style={{ ...s.td, textAlign:'right' }}>{m.cards_finalizadas}</td>
+                  <td style={s.tdNum}>{bs(m.total_servicios)}</td>
+                  <td style={s.tdNum}>{bs(m.total_reemplazos)}</td>
+                  <td style={s.tdNum}>{bs(m.total_ext)}</td>
+                  <td style={{ ...s.td, textAlign:'right', color:'var(--danger)' }}>{bs(m.costo_total||0)}</td>
+                  <td style={{ ...s.td, textAlign:'right' }}>
+                    <span style={s.badge((m.margen_pct||0)>=40?'#10b981':(m.margen_pct||0)>=20?'#f59e0b':'#ef4444')}>{m.margen_pct||0}%</span>
+                    <span style={{ fontSize:10, color:'var(--text-muted)', marginLeft:4 }}>{bs(m.margen||0)}</span>
+                  </td>
+                  <td style={{ ...s.tdNum, fontSize:14 }}>{bs(m.total_facturado)}</td>
+                  <td style={{ ...s.td, textAlign:'center' }}>
+                    {m.detalle?.length > 0 && <ChevronDown size={14} color="var(--text-muted)" style={{ transform: expanded===m.id ? 'rotate(180deg)' : 'none', transition:'transform .2s' }} />}
+                  </td>
+                </tr>
+                {expanded === m.id && m.detalle?.length > 0 && (
+                  <tr><td colSpan={11} style={{ padding:0, background:'var(--bg)' }}>
+                    <div style={{ padding:'12px 20px' }}>
+                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.5px', textTransform:'uppercase', color:'var(--text-muted)', marginBottom:8 }}>Detalle por orden</div>
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead><tr>
+                          <th style={{ ...s.th, fontSize:9 }}>Cliente</th>
+                          <th style={{ ...s.th, fontSize:9 }}>Fecha</th>
+                          <th style={{ ...s.th, fontSize:9 }}>Servicio</th>
+                          <th style={{ ...s.th, fontSize:9, textAlign:'right' }}>Servicios</th>
+                          <th style={{ ...s.th, fontSize:9, textAlign:'right' }}>Reemplazos</th>
+                          <th style={{ ...s.th, fontSize:9, textAlign:'right' }}>Externos</th>
+                          <th style={{ ...s.th, fontSize:9, textAlign:'right' }}>Costo</th>
+                          <th style={{ ...s.th, fontSize:9, textAlign:'right' }}>Total</th>
+                        </tr></thead>
+                        <tbody>
+                          {m.detalle.map((d, i) => (
+                            <tr key={i}>
+                              <td style={{ ...s.td, fontSize:11 }}>{d.cliente_nombre}</td>
+                              <td style={{ ...s.td, fontSize:11, color:'var(--text-soft)' }}>{d.fecha}</td>
+                              <td style={{ ...s.td, fontSize:11 }}>{Array.isArray(d.tipo_servicio) ? d.tipo_servicio.map(t=>SL[t]||t).join(', ') : (SL[d.tipo_servicio]||d.tipo_servicio)}</td>
+                              <td style={{ ...s.tdNum, fontSize:11 }}>{bs(d.total_servicios)}</td>
+                              <td style={{ ...s.tdNum, fontSize:11 }}>{bs(d.total_reemplazos)}</td>
+                              <td style={{ ...s.tdNum, fontSize:11 }}>{bs(d.total_externos)}</td>
+                              <td style={{ ...s.td, fontSize:11, textAlign:'right', color:'var(--danger)' }}>{bs(d.costo)}</td>
+                              <td style={{ ...s.tdNum, fontSize:11, fontWeight:600 }}>{bs(d.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td></tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -250,7 +335,7 @@ export default function Reportes() {
           </Seccion>
 
           {/* 2. MECANICOS */}
-          <Seccion icon={Users} titulo="Rendimiento por Mecanico" color="#3b82f6">
+          <Seccion icon={Users} titulo="Ingresos por Mecanico" color="#3b82f6">
             <div style={s.exportRow}>
               <button style={s.btnPDF} onClick={() => exportPDFMecanicos(data.mecanicos, periodo)}>
                 <FileText size={13} /> PDF
@@ -259,41 +344,21 @@ export default function Reportes() {
                 <FileSpreadsheet size={13} /> Excel
               </button>
             </div>
+            {/* KPIs globales */}
+            <div style={s.kpiGrid}>
+              <KPI label="Ingreso Total" valor={bs(data.mecanicos.reduce((a,m)=>a+m.total_facturado,0))} color="#3b82f6" />
+              <KPI label="Costo Total"   valor={bs(data.mecanicos.reduce((a,m)=>a+(m.costo_total||0),0))} color="#ef4444" />
+              <KPI label="Margen Total"  valor={bs(data.mecanicos.reduce((a,m)=>a+(m.margen||0),0))} color="#10b981" />
+              <KPI label="Mecanicos"     valor={data.mecanicos.length} color="#8b5cf6" small />
+            </div>
             {data.mecanicos.length === 0
               ? <div style={s.noData}>Sin mecanicos</div>
-              : <div style={{ overflowX:'auto' }}>
-                  <table style={s.table}>
-                    <thead><tr>
-                      <th style={s.th}>Mecanico</th>
-                      <th style={s.th}>Tipo Sueldo</th>
-                      <th style={{ ...s.th, textAlign:'right' }}>Asignadas</th>
-                      <th style={{ ...s.th, textAlign:'right' }}>Finalizadas</th>
-                      <th style={{ ...s.th, textAlign:'right' }}>Servicios</th>
-                      <th style={{ ...s.th, textAlign:'right' }}>Reemplazos</th>
-                      <th style={{ ...s.th, textAlign:'right' }}>Externos</th>
-                      <th style={{ ...s.th, textAlign:'right' }}>Total</th>
-                    </tr></thead>
-                    <tbody>
-                      {data.mecanicos.map(m => (
-                        <tr key={m.id}>
-                          <td style={{ ...s.td, fontWeight:600 }}>{m.nombre}</td>
-                          <td style={s.td}><span style={s.badge(m.tipo_sueldo==='FIJO'?'#10b981':'#8b5cf6')}>{m.tipo_sueldo||'--'}</span></td>
-                          <td style={{ ...s.td, textAlign:'right' }}>{m.cards_asignadas}</td>
-                          <td style={{ ...s.td, textAlign:'right' }}>{m.cards_finalizadas}</td>
-                          <td style={s.tdNum}>{bs(m.total_servicios)}</td>
-                          <td style={s.tdNum}>{bs(m.total_reemplazos)}</td>
-                          <td style={s.tdNum}>{bs(m.total_ext)}</td>
-                          <td style={{ ...s.tdNum, fontSize:14 }}>{bs(m.total_facturado)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              : <MechanicosConDetalle mecanicos={data.mecanicos} />
             }
           </Seccion>
 
           {/* 3. INSUMOS */}
-          <Seccion icon={Package} titulo="Insumos / Reemplazos mas Usados" color="#06b6d4" defaultOpen={false}>
+          <Seccion icon={Package} titulo="Inventario / Reemplazos más Usados" color="#06b6d4" defaultOpen={false}>
             <div style={s.exportRow}>
               <button style={s.btnPDF} onClick={() => exportPDFInsumos(data.insumos, periodo)}>
                 <FileText size={13} /> PDF

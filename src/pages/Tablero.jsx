@@ -51,6 +51,8 @@ const s = {
   btnRow:    { display:'flex', gap:8, marginTop:6 },
   btnCancel: { flex:1, padding:'10px', borderRadius:8, border:'1px solid var(--border)', background:'transparent', color:'var(--text-soft)', fontSize:13, cursor:'pointer' },
   btnSave:   { flex:1, padding:'10px', borderRadius:8, border:'none', background:'var(--accent)', color:'var(--accent-contrast)', fontSize:13, fontWeight:600, cursor:'pointer' },
+  chipWrap:  { display:'flex', flexWrap:'wrap', gap:8, marginBottom:13 },
+  chip:      (sel) => ({ padding:'6px 12px', borderRadius:8, border:`1px solid ${sel?'var(--accent)':'var(--border)'}`, background: sel?'var(--accent-weak)':'transparent', color: sel?'var(--accent)':'var(--text-soft)', fontSize:12, fontWeight: sel?600:400, cursor:'pointer', transition:'all .15s' }),
 }
 
 function calcTotal(card) {
@@ -62,7 +64,7 @@ function calcTotal(card) {
 
 function CardKanban({ card, onClick }) {
   const estado  = ESTADOS.find(e=>e.key===card.estado)
-  const servicio= SERVICIOS.find(s=>s.value===card.tipo_servicio)
+  const tipos = Array.isArray(card.tipo_servicio) ? card.tipo_servicio : (card.tipo_servicio ? [card.tipo_servicio] : [])
   const total   = calcTotal(card)
   return (
     <div className="kanban-card" onClick={()=>onClick(card.id)}>
@@ -72,7 +74,10 @@ function CardKanban({ card, onClick }) {
       </div>
       <div style={s.cardName}>{card.cliente_nombre}</div>
       {card.cliente_telefono && <div style={s.cardMeta}><Phone size={10}/>{card.cliente_telefono}</div>}
-      <div style={s.cardMeta}><Wrench size={10}/>{servicio?.label||card.tipo_servicio}</div>
+      {tipos.map(t => {
+        const sv = SERVICIOS.find(s=>s.value===t)
+        return <div key={t} style={s.cardMeta}><Wrench size={10}/>{sv?.label||t}</div>
+      })}
       {card.mecanico && <div style={s.cardMeta}><User size={10}/>{card.mecanico.nombre}</div>}
       <div style={s.cardMeta}><Clock size={10}/>{card.fecha}</div>
       {total > 0 && <div style={s.cardTotal}>Bs. {total.toFixed(2)}</div>}
@@ -95,7 +100,7 @@ export default function Tablero() {
   const [form, setForm] = useState({
     cliente_nombre:'', cliente_telefono:'',
     fecha: new Date().toISOString().slice(0,10),
-    tipo_servicio:'MANTENIMIENTO_BASICO', notas:'',
+    tipo_servicio:['MANTENIMIENTO_BASICO'], notas:'',
   })
 
   const load = useCallback(async () => {
@@ -119,7 +124,10 @@ export default function Tablero() {
           !String(c.id).includes(bq) &&
           !(c.cliente_telefono||'').includes(bq)) return false
       if (filtroMecanico && c.mecanico_id !== filtroMecanico) return false
-      if (filtroServicio && c.tipo_servicio !== filtroServicio) return false
+      if (filtroServicio) {
+      const tipos = Array.isArray(c.tipo_servicio) ? c.tipo_servicio : [c.tipo_servicio]
+      if (!tipos.includes(filtroServicio)) return false
+    }
       if (filtroEstado && c.estado !== filtroEstado) return false
       return true
     })
@@ -140,7 +148,7 @@ export default function Tablero() {
     if (!res?.ok) { toast.error(res?.error||'Error'); return }
     toast.success('Orden creada — agrega los servicios desde la card')
     setShowModal(false)
-    setForm({ cliente_nombre:'', cliente_telefono:'', fecha:new Date().toISOString().slice(0,10), tipo_servicio:'MANTENIMIENTO_BASICO', notas:'' })
+    setForm({ cliente_nombre:'', cliente_telefono:'', fecha:new Date().toISOString().slice(0,10), tipo_servicio:['MANTENIMIENTO_BASICO'], notas:'' })
     load()
   }
 
@@ -153,11 +161,11 @@ export default function Tablero() {
       {/* Header */}
       <div style={s.header}>
         <div>
-          <div style={s.title}>Tablero de Trabajo</div>
+          <div style={s.title}>Tablero de Servicios</div>
           <div style={s.sub}>
             {hayFiltros
               ? `${totalFiltradas} de ${totalCards} órdenes`
-              : `${totalCards} órdenes activas`
+              : `${totalCards} servicios activos`
             }
           </div>
         </div>
@@ -167,7 +175,7 @@ export default function Tablero() {
             Actualizar
           </button>
           <button style={s.btnPrimary} onClick={()=>setShowModal(true)}>
-            <Plus size={14}/> Nueva Card
+            <Plus size={14}/> Nuevo Servicio
           </button>
         </div>
       </div>
@@ -235,12 +243,12 @@ export default function Tablero() {
           </div>
       }
 
-      {/* Modal nueva card */}
+      {/* Modal nuevo servicio */}
       {showModal && (
         <div style={s.overlay} onClick={e=>{if(e.target===e.currentTarget)setShowModal(false)}}>
           <div style={s.modal}>
             <div style={s.modalTitle}>
-              <span>Nueva Orden de Trabajo</span>
+              <span>Nuevo Servicio</span>
               <button onClick={()=>setShowModal(false)} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:2}}>
                 <X size={18}/>
               </button>
@@ -271,10 +279,24 @@ export default function Tablero() {
                 </div>
               </div>
 
-              <label style={s.label}>Tipo de servicio *</label>
-              <select style={s.select} value={form.tipo_servicio} onChange={e=>setForm(f=>({...f,tipo_servicio:e.target.value}))} required>
-                {SERVICIOS.map(sv=><option key={sv.value} value={sv.value}>{sv.label}</option>)}
-              </select>
+              <label style={s.label}>Tipo de servicio * <span style={{fontWeight:400,fontSize:10,color:'var(--text-faint)'}}>(selecciona uno o varios)</span></label>
+              <div style={s.chipWrap}>
+                {SERVICIOS.map(sv => {
+                  const sel = form.tipo_servicio.includes(sv.value)
+                  return (
+                    <button key={sv.value} type="button"
+                      style={s.chip(sel)}
+                      onClick={()=>{
+                        setForm(f=>({...f, tipo_servicio: sel
+                          ? f.tipo_servicio.filter(v=>v!==sv.value)
+                          : [...f.tipo_servicio, sv.value]
+                        }))
+                      }}>
+                      {sel && '✓ '}{sv.label}
+                    </button>
+                  )
+                })}
+              </div>
 
               <label style={s.label}>Notas iniciales</label>
               <textarea
@@ -287,7 +309,7 @@ export default function Tablero() {
               <div style={s.btnRow}>
                 <button type="button" style={s.btnCancel} onClick={()=>setShowModal(false)}>Cancelar</button>
                 <button type="submit" style={{...s.btnSave,opacity:saving?.6:1}} disabled={saving}>
-                  {saving?'Creando…':'Crear Orden'}
+                  {saving?'Creando…':'Crear Servicio'}
                 </button>
               </div>
             </form>

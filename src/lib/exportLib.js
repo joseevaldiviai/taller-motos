@@ -176,38 +176,54 @@ export function exportPDFResumen(data) {
 // ── EXPORT PDF: Mecánicos ──────────────────────────────────────
 export function exportPDFMecanicos(data, periodo) {
   const doc = crearPDF(
-    'Reporte de Mecánicos',
+    'Reporte de Ingresos por Mecánico',
     `Período: ${periodo.desde}  →  ${periodo.hasta}`
   )
   let y = 50
 
-  // Resumen global
+  // KPIs globales
+  const totalIng = data.reduce((a,m) => a + m.total_facturado, 0)
+  const totalCos = data.reduce((a,m) => a + (m.costo_total||0), 0)
+  const totalMar = data.reduce((a,m) => a + (m.margen||0), 0)
+  y = kpiBox(doc, [
+    { label: 'Ingreso Total', valor: bs(totalIng) },
+    { label: 'Costo Total',   valor: bs(totalCos) },
+    { label: 'Margen Total',  valor: bs(totalMar) },
+    { label: 'Mecánicos',     valor: String(data.length) },
+  ], y)
+  y += 2
+
+  // Resumen global con margen
   y = tabla(doc,
-    ['Mecánico', 'Tipo Sueldo', 'Asignadas', 'Finalizadas', 'Servicios', 'Reemplazos', 'Externos', 'Total Facturado'],
+    ['Mecánico', 'Tipo Sueldo', 'Asignadas', 'Finalizadas', 'Servicios', 'Reemplazos', 'Externos', 'Costo', 'Margen %', 'Total'],
     data.map(m => [
       m.nombre, m.tipo_sueldo || '—', m.cards_asignadas, m.cards_finalizadas,
-      bs(m.total_servicios), bs(m.total_reemplazos), bs(m.total_ext), bs(m.total_facturado),
+      bs(m.total_servicios), bs(m.total_reemplazos), bs(m.total_ext),
+      bs(m.costo_total||0), pct(m.margen_pct||0), bs(m.total_facturado),
     ]),
     y,
-    { columnStyles: { 7: { halign:'right', fontStyle:'bold' } } }
+    { columnStyles: { 7: { halign:'right' }, 8: { halign:'right' }, 9: { halign:'right', fontStyle:'bold' } } }
   )
 
-  // Detalle por mecánico
+  // Detalle por mecánico con desglose de ingresos y costos
   data.forEach(m => {
     if (!m.detalle?.length) return
     if (y > 240) { doc.addPage(); y = 20 }
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.setTextColor(30, 40, 50)
-    doc.text(`Detalle — ${m.nombre}`, 14, y)
+    doc.text(`Detalle — ${m.nombre}  |  Total: ${bs(m.total_facturado)}  |  Costo: ${bs(m.costo_total||0)}  |  Margen: ${bs(m.margen||0)} (${m.margen_pct||0}%)`, 14, y)
     y += 3
     y = tabla(doc,
-      ['Cliente', 'Fecha', 'Servicio', 'Total'],
+      ['Cliente', 'Fecha', 'Servicio', 'Servicios', 'Reemplazos', 'Externos', 'Costo', 'Total'],
       m.detalle.map(d => [
-        d.cliente_nombre, d.fecha, SERVICIOS_LABEL[d.tipo_servicio] || d.tipo_servicio, bs(d.total),
+        d.cliente_nombre, d.fecha,
+        (Array.isArray(d.tipo_servicio) ? d.tipo_servicio.map(t=>SERVICIOS_LABEL[t]||t).join(', ') : (SERVICIOS_LABEL[d.tipo_servicio] || d.tipo_servicio)),
+        bs(d.total_servicios), bs(d.total_reemplazos), bs(d.total_externos),
+        bs(d.costo||0), bs(d.total),
       ]),
       y,
-      { columnStyles: { 3: { halign:'right' } }, styles: { fontSize: 7 } }
+      { columnStyles: { 6: { halign:'right' }, 7: { halign:'right', fontStyle:'bold' } }, styles: { fontSize: 7 } }
     )
   })
 
@@ -328,20 +344,23 @@ export function exportExcelCompleto({ resumen, mecanicos, insumos, externos, car
 
   // ── Hoja 2: Mecánicos ──
   const wsMec = XLSX.utils.aoa_to_sheet([
-    ['REPORTE DE MECÁNICOS'],
+    ['REPORTE DE INGRESOS POR MECÁNICO'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     [],
-    ['Mecánico', 'Tipo Sueldo', 'Sueldo Base', 'Cards Asignadas', 'Cards Finalizadas', 'Ing. Servicios', 'Ing. Reemplazos', 'Ing. Externos', 'Total Facturado'],
+    ['Mecánico', 'Tipo Sueldo', 'Sueldo Base', 'Asignadas', 'Finalizadas', 'Ing. Servicios', 'Ing. Reemplazos', 'Ing. Externos', 'Costo Total', 'Margen', 'Margen %', 'Total Facturado'],
     ...mecanicos.map(m => [
       m.nombre, m.tipo_sueldo || '—', m.sueldo_base || 0,
       m.cards_asignadas, m.cards_finalizadas,
-      m.total_servicios, m.total_reemplazos, m.total_ext, m.total_facturado,
+      m.total_servicios, m.total_reemplazos, m.total_ext,
+      m.costo_total||0, m.margen||0, m.margen_pct||0, m.total_facturado,
     ]),
     [],
     ['DETALLE POR MECÁNICO'],
-    ['Mecánico', 'Cliente', 'Fecha', 'Servicio', 'Total'],
+    ['Mecánico', 'Cliente', 'Fecha', 'Servicio', 'Servicios', 'Reemplazos', 'Externos', 'Costo', 'Total'],
     ...mecanicos.flatMap(m => (m.detalle || []).map(d => [
-      m.nombre, d.cliente_nombre, d.fecha, SERVICIOS_LABEL[d.tipo_servicio] || d.tipo_servicio, d.total,
+      m.nombre, d.cliente_nombre, d.fecha,
+      Array.isArray(d.tipo_servicio) ? d.tipo_servicio.map(t=>SERVICIOS_LABEL[t]||t).join(', ') : (SERVICIOS_LABEL[d.tipo_servicio] || d.tipo_servicio),
+      d.total_servicios, d.total_reemplazos, d.total_externos, d.costo||0, d.total,
     ])),
   ])
   XLSX.utils.book_append_sheet(wb, wsMec, 'Mecánicos')
@@ -469,15 +488,27 @@ export function exportExcelClientes(data, periodo) {
 export function exportExcelMecanicos(data, periodo) {
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.aoa_to_sheet([
-    ['REPORTE DE MECÁNICOS'],
+    ['REPORTE DE INGRESOS POR MECÁNICO'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     [],
-    ['Mecánico','Tipo Sueldo','Sueldo Base','Cards Asignadas','Cards Finalizadas','Ing. Servicios','Ing. Reemplazos','Ing. Externos','Total Facturado'],
-    ...data.map(m=>[m.nombre,m.tipo_sueldo||'—',m.sueldo_base||0,m.cards_asignadas,m.cards_finalizadas,m.total_servicios,m.total_reemplazos,m.total_ext,m.total_facturado]),
+    ['Mecánico','Tipo Sueldo','Sueldo Base','Asignadas','Finalizadas','Ing. Servicios','Ing. Reemplazos','Ing. Externos','Costo Total','Margen','Margen %','Total Facturado'],
+    ...data.map(m=>[m.nombre,m.tipo_sueldo||'—',m.sueldo_base||0,m.cards_asignadas,m.cards_finalizadas,m.total_servicios,m.total_reemplazos,m.total_ext,m.costo_total||0,m.margen||0,m.margen_pct||0,m.total_facturado]),
     [],
-    ['DETALLE'],
-    ['Mecánico','Cliente','Fecha','Servicio','Total'],
-    ...data.flatMap(m=>(m.detalle||[]).map(d=>[m.nombre,d.cliente_nombre,d.fecha,d.tipo_servicio,d.total])),
+    ['TOTALES','','','','','',
+      data.reduce((a,m)=>a+m.total_servicios,0),
+      data.reduce((a,m)=>a+m.total_reemplazos,0),
+      data.reduce((a,m)=>a+m.total_ext,0),
+      data.reduce((a,m)=>a+(m.costo_total||0),0),
+      data.reduce((a,m)=>a+(m.margen||0),0),'',
+      data.reduce((a,m)=>a+m.total_facturado,0)],
+    [],
+    ['DETALLE POR MECÁNICO'],
+    ['Mecánico','Cliente','Fecha','Servicio','Servicios','Reemplazos','Externos','Costo','Total'],
+    ...data.flatMap(m=>(m.detalle||[]).map(d=>[
+      m.nombre,d.cliente_nombre,d.fecha,
+      Array.isArray(d.tipo_servicio)?d.tipo_servicio.map(t=>SERVICIOS_LABEL[t]||t).join(', '):(SERVICIOS_LABEL[d.tipo_servicio]||d.tipo_servicio),
+      d.total_servicios,d.total_reemplazos,d.total_externos,d.costo||0,d.total
+    ])),
   ])
   XLSX.utils.book_append_sheet(wb, ws, 'Mecánicos')
   XLSX.writeFile(wb, `mecanicos-${periodo.desde}-${periodo.hasta}.xlsx`)

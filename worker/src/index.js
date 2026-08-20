@@ -185,6 +185,10 @@ export default {
       const { email, username, nombre, rol, password, tipo_sueldo, sueldo_base } = d
       if (!email || !username || !nombre || !rol || !password) return err('Faltan campos')
 
+      const { data: existingUser } = await supabase
+          .from('user_profiles').select('id').eq('username', username).single()
+      if (existingUser) return err('El nombre de usuario ya está en uso. Elige otro.')
+
       const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
         email, password, email_confirm: true,
       })
@@ -194,6 +198,8 @@ export default {
         id: authData.user.id, email, username, nombre, rol,
         tipo_sueldo: rol === 'MECANICO' ? tipo_sueldo : null,
         sueldo_base: rol === 'MECANICO' ? sueldo_base : null,
+        sueldo_semanal: rol === 'MECANICO' ? (d.sueldo_semanal || null) : null,
+
         activo: true,
       })
       if (profileErr) return err(profileErr.message)
@@ -275,11 +281,15 @@ export default {
 
     if (path === '/cards' && method === 'POST') {
       const d = body.data || {}
+
+      const tipo_servicio2 = Array.isArray(d.tipo_servicio)
+          ? d.tipo_servicio
+          : (d.tipo_servicio ? [d.tipo_servicio] : ['MANTENIMIENTO_BASICO'])
       const { data, error } = await supabase.from('cards').insert({
         cliente_nombre: d.cliente_nombre,
         cliente_telefono: d.cliente_telefono,
         fecha: d.fecha || new Date().toISOString().slice(0,10),
-        tipo_servicio: d.tipo_servicio,
+        tipo_servicio: tipo_servicio2,
         notas: d.notas,
         estado: 'NUEVO',
       }).select().single()
@@ -487,7 +497,7 @@ export default {
       const { data: mecanicos } = await supabase.from('user_profiles')
         .select('id,nombre,tipo_sueldo,sueldo_base').eq('rol','MECANICO').eq('activo',true)
       const { data: cards } = await supabase.from('cards')
-        .select('mecanico_id,estado,fecha,tipo_servicio,cliente_nombre,servicios_realizados(precio),reemplazos(precio,cantidad),trabajos_externos(precio_final,costo)')
+        .select('mecanico_id,estado,fecha,tipo_servicio,cliente_nombre,servicios_realizados(precio),reemplazos(precio,costo,cantidad),trabajos_externos(precio_final,costo)')
         .gte('fecha', desde).lte('fecha', hasta)
       const resumen = (mecanicos||[]).map(m => {
         const propias = (cards||[]).filter(c=>c.mecanico_id===m.id)
@@ -496,11 +506,26 @@ export default {
         const total_reemplazos = fin2.reduce((a,c)=>a+(c.reemplazos||[]).reduce((b,r)=>b+r.precio*r.cantidad,0),0)
         const total_ext        = fin2.reduce((a,c)=>a+(c.trabajos_externos||[]).reduce((b,t)=>b+t.precio_final,0),0)
         const total_facturado  = total_servicios+total_reemplazos+total_ext
+        const costo_reemplazos = fin2.reduce((a,c)=>a+(c.reemplazos||[]).reduce((b,r)=>b+(r.costo||0)*r.cantidad,0),0)
+        const costo_externos   = fin2.reduce((a,c)=>a+(c.trabajos_externos||[]).reduce((b,t)=>b+(t.costo||0),0),0)
+        const costo_total = costo_reemplazos+costo_externos
+        const margen = total_facturado-costo_total
+        const detalle = fin2.map(c=>{
+          const serv = (c.servicios_realizados||[]).reduce((a,s)=>a+(s.precio||0),0)
+          const remp = (c.reemplazos||[]).reduce((a,r)=>a+r.precio*r.cantidad,0)
+          const ext  = (c.trabajos_externos||[]).reduce((a,t)=>a+t.precio_final,0)
+          const cost = (c.reemplazos||[]).reduce((a,r)=>a+(r.costo||0)*r.cantidad,0)
+                  +(c.trabajos_externos||[]).reduce((a,t)=>a+(t.costo||0),0)
+          return { cliente_nombre:c.cliente_nombre, fecha:c.fecha, tipo_servicio:c.tipo_servicio,
+                   total_servicios:serv, total_reemplazos:remp, total_externos:ext,
+                   costo:cost, total:serv+remp+ext }
+        })
         return {
           id:m.id, nombre:m.nombre, tipo_sueldo:m.tipo_sueldo, sueldo_base:m.sueldo_base,
           cards_asignadas:propias.length, cards_finalizadas:fin2.length,
           total_servicios, total_reemplazos, total_ext, total_facturado,
-          detalle: fin2.map(c=>({ cliente_nombre:c.cliente_nombre, fecha:c.fecha, tipo_servicio:c.tipo_servicio, total:calcTotalCard(c) })),
+          costo_total, margen, margen_pct: total_facturado>0?Math.round((margen/total_facturado)*100):0,
+          detalle,
         }
       })
       return ok(resumen)
@@ -584,7 +609,74 @@ export default {
       }))
       return ok(lista)
     }
+    if (path === '/compras' && method === 'GET') {
+      const desde = url.searchParams.get('desde') || '2000-01-01'
+      const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
+      const { data, error } = await supabase.from('compras')
+          .select('*, registrado:registrado_por(nombre)')
+          .gte('fecha', desde).lte('fecha', hasta)
+          .order('fecha', { ascending: false })
+      if (error) return err(error.message)
+      return ok(data)
+    }
 
+    if (path === '/compras' && method === 'POST') {
+      const d = body.data || {}
+      if (!d.descripcion || !d.costo_unit) return err('Faltan campos: descripcion, costo_unit')
+      const { data, error } = await supabase.from('compras').insert({
+        descripcion:   d.descripcion,
+        categoria:     d.categoria || 'CONSUMIBLE',
+        cantidad:      parseInt(d.cantidad) || 1,
+        costo_unit:    parseFloat(d.costo_unit),
+        proveedor:     d.proveedor || null,
+        notas:         d.notas || null,
+        fecha:         d.fecha || new Date().toISOString().slice(0,10),
+        registrado_por: auth.sub,
+      }).select().single()
+      if (error) return err(error.message)
+      return ok(data)
+    }
+
+    if (path.startsWith('/compras/') && method === 'PATCH') {
+      if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
+      const id = path.split('/')[2]
+      const d = body.data || {}
+      const allowed = ['descripcion','categoria','cantidad','costo_unit','proveedor','notas','fecha']
+      const update = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
+      const { error } = await supabase.from('compras').update(update).eq('id', id)
+      if (error) return err(error.message)
+      return ok({ message: 'Compra actualizada' })
+    }
+
+    if (path.startsWith('/compras/') && method === 'DELETE') {
+      if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
+      const id = path.split('/')[2]
+      const { error } = await supabase.from('compras').delete().eq('id', id)
+      if (error) return err(error.message)
+      return ok({ message: 'Compra eliminada' })
+    }
+
+    // reporte compras
+    if (path === '/reportes/compras' && method === 'GET') {
+      if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
+      const desde = url.searchParams.get('desde') || '2000-01-01'
+      const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
+      const { data } = await supabase.from('compras')
+          .select('*')
+          .gte('fecha', desde).lte('fecha', hasta)
+      const lista = data || []
+      const por_categoria = {}
+      lista.forEach(c => {
+        if (!por_categoria[c.categoria]) por_categoria[c.categoria] = { cantidad: 0, total: 0 }
+        por_categoria[c.categoria].cantidad++
+        por_categoria[c.categoria].total += c.costo_total
+      })
+      return ok({
+        lista,
+        total_gasto: lista.reduce((a,c) => a + c.costo_total, 0),
+        por_categoria,
+      })
+    }
     // ── NOTIFICACIONES IN-APP ─────────────────────────────────
     if (path === '/notificaciones' && method === 'GET') {
       const { data, error } = await supabase
@@ -663,7 +755,7 @@ export default {
 // Llamar internamente desde cambiarEstado
 export async function notificarCambioEstado({ supabase, env, cardId, clienteNombre, estadoDesde, estadoHasta, mecanicoId, nota }) {
   const ESTADOS_LABEL = {
-    NUEVO: 'Nuevo', EN_CURSO: 'En Curso', PAUSADO: 'Pausado',
+    NUEVO: 'Nuevo', EN_CURSO: 'En Curso',
     TERMINADO: 'Terminado', PRUEBAS: 'Pruebas', FINALIZADO: 'Finalizado',
   }
 
