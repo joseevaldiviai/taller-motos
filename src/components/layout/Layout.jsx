@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { Wrench, LayoutDashboard, Users, Package, BarChart2, LogOut, Sun, Moon, Menu, X, UserCircle } from 'lucide-react'
+import { Wrench, LayoutDashboard, Users, Package, BarChart2, LogOut, Sun, Moon, Menu, X, UserCircle, CheckCircle, ShoppingCart } from 'lucide-react'
 import useAuthStore from '../../store/authStore'
 import useNotificacionesStore from '../../store/notificacionesStore'
 import PanelNotificaciones, { BellButton } from '../notificaciones/PanelNotificaciones'
@@ -32,13 +32,19 @@ function NavLinks({ onClose }) {
       <NavLink to="/tablero" style={({ isActive }) => s.navLink(isActive)} onClick={onClose}>
         <LayoutDashboard size={15} /><span>Tablero</span>
       </NavLink>
+      <NavLink to="/finalizados" style={({ isActive }) => s.navLink(isActive)} onClick={onClose}>
+        <CheckCircle size={15} /><span>Finalizados</span>
+      </NavLink>
       {isAdmin && <>
         <div style={s.navSection}>Administración</div>
         <NavLink to="/usuarios" style={({ isActive }) => s.navLink(isActive)} onClick={onClose}>
           <Users size={15} /><span>Usuarios</span>
         </NavLink>
         <NavLink to="/insumos" style={({ isActive }) => s.navLink(isActive)} onClick={onClose}>
-          <Package size={15} /><span>Insumos</span>
+          <Package size={15} /><span>Inventario</span>
+        </NavLink>
+        <NavLink to="/compras" style={({ isActive }) => s.navLink(isActive)} onClick={onClose}>
+          <ShoppingCart size={15} /><span>Compras</span>
         </NavLink>
         <NavLink to="/reportes" style={({ isActive }) => s.navLink(isActive)} onClick={onClose}>
           <BarChart2 size={15} /><span>Reportes</span>

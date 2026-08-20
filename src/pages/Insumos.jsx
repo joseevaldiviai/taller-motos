@@ -41,14 +41,14 @@ function ModalInsumo({ token, insumo, onClose, onSaved }) {
       : await api.crearInsumo({ token, data })
     setSaving(false)
     if (!res?.ok) { toast.error(res?.error || 'Error'); return }
-    toast.success(isEdit ? 'Insumo actualizado' : 'Insumo creado')
+    toast.success(isEdit ? 'Ítem actualizado' : 'Ítem creado')
     onSaved()
   }
 
   return (
     <div style={s.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={s.modal}>
-        <div style={s.modalTitle}>{isEdit ? 'Editar Insumo' : 'Nuevo Insumo'}</div>
+        <div style={s.modalTitle}>{isEdit ? 'Editar Ítem' : 'Nuevo Ítem de Inventario'}</div>
         <form onSubmit={handleSave}>
           <label style={s.label}>Nombre *</label>
           <input style={s.input} value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} required placeholder="Ej: Filtro de aceite" />
@@ -94,7 +94,7 @@ export default function Insumos() {
     if (!confirm('¿Eliminar este insumo?')) return
     const res = await api.eliminarInsumo({ token, id })
     if (!res?.ok) { toast.error(res?.error || 'Error'); return }
-    toast.success('Insumo eliminado')
+    toast.success('Ítem eliminado')
     load()
   }
 
@@ -104,17 +104,17 @@ export default function Insumos() {
     <div style={s.shell}>
       <div style={s.header}>
         <div>
-          <div style={s.title}>📦 Insumos</div>
-          <div style={s.sub}>{insumos.length} insumos registrados</div>
+          <div style={s.title}>📦 Inventario</div>
+          <div style={s.sub}>{insumos.length} ítems en inventario</div>
         </div>
         <button style={s.btnPrimary} onClick={() => setModal('crear')}>
-          <Plus size={14} /> Nuevo insumo
+          <Plus size={14} /> Nuevo ítem
         </button>
       </div>
 
       <input
         style={{ width:'100%', maxWidth:340, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'9px 14px', color:'var(--text)', fontSize:13, marginBottom:18 }}
-        placeholder="Buscar insumo…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+        placeholder="Buscar en inventario…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
       />
 
       {loading
@@ -122,7 +122,7 @@ export default function Insumos() {
         : filtrados.length === 0
         ? <div style={{ padding:60, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>
             <Package size={32} style={{ display:'block', margin:'0 auto 12px', opacity:.3 }} />
-            {busqueda ? 'Sin resultados' : 'No hay insumos registrados'}
+            {busqueda ? 'Sin resultados' : 'No hay ítems en inventario'}
           </div>
         : <div style={s.grid}>
             {filtrados.map(ins => (

@@ -107,12 +107,11 @@ export default function PanelNotificaciones() {
 
   return (
     <div ref={panelRef} style={{
-      position: 'absolute', top: '100%', right: 0,
-      width: 340, maxWidth: '95vw',
+      position: 'fixed', bottom: 70, left: 210, right: 'auto',
+      width: 320, maxWidth: 'calc(100vw - 20px)',
       background: 'var(--card)', border: '1px solid var(--border)',
       borderRadius: 12, boxShadow: '0 16px 48px var(--shadow)',
       zIndex: 200, overflow: 'hidden',
-      marginTop: 8,
     }}>
       {/* Header */}
       <div style={{

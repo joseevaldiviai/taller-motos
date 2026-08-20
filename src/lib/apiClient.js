@@ -124,6 +124,12 @@ export const api = {
   reporteExternos:   ({ token, desde, hasta }) => request(`/reportes/externos?desde=${desde}&hasta=${hasta}`, { token }),
   reporteCards:      ({ token, desde, hasta }) => request(`/reportes/cards?desde=${desde}&hasta=${hasta}`, { token }),
   reporteClientes:   ({ token, desde, hasta }) => request(`/reportes/clientes?desde=${desde}&hasta=${hasta}`, { token }),
+
+  listarCompras:    ({ token, desde, hasta }) => request(`/compras?desde=${desde}&hasta=${hasta}`, { token }),
+  crearCompra:      ({ token, data }) => request('/compras', { method:'POST', token, body:{ data } }),
+  actualizarCompra: ({ token, id, data }) => request(`/compras/${id}`, { method:'PATCH', token, body:{ data } }),
+  eliminarCompra:   ({ token, id }) => request(`/compras/${id}`, { method:'DELETE', token }),
+  reporteCompras:   ({ token, desde, hasta }) => request(`/reportes/compras?desde=${desde}&hasta=${hasta}`, { token }),
 }
 
 export { getStoredSession, refreshSession, storeSession }

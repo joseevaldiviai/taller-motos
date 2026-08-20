@@ -8,6 +8,11 @@ import Tablero from './pages/Tablero'
 import Usuarios from './pages/Usuarios'
 import Insumos from './pages/Insumos'
 import CardDetalle from './pages/CardDetalle'
+import Perfil from './pages/Perfil'
+import NotFound from './pages/NotFound'
+import Finalizados from './pages/Finalizados'
+import Compras from './pages/Compras'
+
 const Reportes = lazy(() => import('./pages/Reportes'))
 
 function RequireAuth({ children }) {
@@ -48,6 +53,8 @@ export default function App() {
           <Route path="cards/:id" element={<CardDetalle />} />
           <Route path="usuarios" element={<RequireAdmin><Usuarios /></RequireAdmin>} />
           <Route path="insumos" element={<RequireAdmin><Insumos /></RequireAdmin>} />
+          <Route path="finalizados" element={<Finalizados />} />
+          <Route path="compras" element={<Compras />} />
           <Route path="reportes" element={<RequireAdmin><Suspense fallback={<div style={{padding:60,textAlign:"center",color:"var(--text-muted)"}}>Cargando reportes…</div>}><Reportes /></Suspense></RequireAdmin>} />
           <Route path="perfil" element={<Perfil />} />
         </Route>
