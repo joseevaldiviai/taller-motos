@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import { FileText, TrendingUp, Users, Package, Wrench, BarChart2, RefreshCw, FileSpreadsheet, ChevronDown, UserCheck } from 'lucide-react'
+import { FileText, TrendingUp, Users, Package, Wrench, BarChart2, RefreshCw, FileSpreadsheet, ChevronDown, UserCheck, Clock } from 'lucide-react'
 import { api } from '../lib/apiClient'
 import useAuthStore from '../store/authStore'
 import {
@@ -40,7 +40,26 @@ const s = {
 }
 
 const bs = (n) => `Bs. ${Number(n||0).toFixed(2)}`
-const SL = { MANTENIMIENTO_BASICO:'Mant. Básico', MANTENIMIENTO_COMPLETO:'Mant. Completo', CAMBIO_ACEITE:'Cambio Aceite', REPARACION_TELESCOPIO:'Rep. Telescopio' }
+const SL = {
+  CAMBIO_ACEITE:             'Cambio Aceite',
+  REPARACION_MOTOR:          'Rep. Motor',
+  AJUSTE_VALVULAS:           'Ajuste Válvulas',
+  LIMPIEZA_CARBURADOR:       'Limpieza Carburador',
+  LIMPIEZA_INYECTORES:       'Limp. Inyectores',
+  CAMBIO_KIT_TRANSMISION:    'Kit Transmisión',
+  CAMBIO_PASTILLAS:          'Pastillas/Zapatas',
+  PURGA_FRENOS:              'Purga Frenos',
+  REPARACION_SUSPENSION:     'Rep. Suspensión',
+  REPARACION_ELECTRICA:      'Rep. Eléctrica',
+  CAMBIO_BATERIA:            'Cambio Batería',
+  ESCANEO_COMPUTARIZADO:     'Escaneo',
+  LIMPIEZA_SISTEMA_INYECCION:'Limp. Inyección',
+  CAMBIO_LLANTAS:            'Cambio Llantas',
+  MANTENIMIENTO_BASICO:      'Mant. Básico',
+  MANTENIMIENTO_COMPLETO:    'Mant. Completo',
+  MANTENIMIENTO_DETALLADO:   'Mant. Detallado',
+  RESTAURACION:              'Restauración',
+}
 const EC = { NUEVO:'#3b82f6', EN_CURSO:'#f59e0b', PAUSADO:'#8b5cf6', TERMINADO:'#10b981', PRUEBAS:'#06b6d4', FINALIZADO:'#6b7280' }
 const SC = { MANTENIMIENTO_BASICO:'#3b82f6', MANTENIMIENTO_COMPLETO:'#f59e0b', CAMBIO_ACEITE:'#10b981', REPARACION_TELESCOPIO:'#8b5cf6' }
 
@@ -167,30 +186,34 @@ export default function Reportes() {
   const [periodo, setPeriodo] = useState({ desde: primeroDeMes, hasta: hoy })
   const [data, setData] = useState(null)
   const [clientes, setClientes] = useState([])
+  const [asistencia, setAsistencia] = useState([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
 
   const cargar = useCallback(async () => {
     setLoading(true)
     toast.loading('Cargando reportes...', { id: 'loading-rep' })
-    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
+    const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
       api.reporteResumen({ token, ...periodo }),
       api.reporteMecanicos({ token, ...periodo }),
       api.reporteInsumos({ token, ...periodo }),
       api.reporteExternos({ token, ...periodo }),
       api.reporteCards({ token, ...periodo }),
       api.reporteClientes({ token, ...periodo }),
+      api.reporteAsistencia({ token, ...periodo }),
     ])
     toast.dismiss('loading-rep')
     setLoading(false)
     if (!r1.ok) { toast.error('Error cargando reportes'); return }
     setClientes(r6.data || [])
+    setAsistencia(r7.data || [])
     setData({
       resumen:   r1.data,
       mecanicos: r2.data || [],
       insumos:   r3.data || [],
       externos:  r4.data || { lista:[], total_ingresos:0, total_costos:0, margen_total:0 },
       cards:     r5.data || [],
+      asistencia: r7.data || [],
     })
     toast.success('Reportes actualizados')
   }, [token, periodo])
@@ -198,7 +221,7 @@ export default function Reportes() {
   const handleExcelCompleto = async () => {
     if (!data) return
     setExporting(true)
-    try { exportExcelCompleto({ ...data, clientes, periodo }); toast.success('Excel exportado') }
+    try { exportExcelCompleto({ ...data, clientes, asistencia, periodo }); toast.success('Excel exportado') }
     catch { toast.error('Error exportando Excel') }
     setExporting(false)
   }
@@ -218,39 +241,49 @@ export default function Reportes() {
           <div style={s.sub}>Ingresos, mecanicos, insumos y mas — exportacion PDF y Excel</div>
         </div>
         {data && (
-          <button style={{ ...s.btnGhost, color:'#10b981', border:'1px solid #10b98144' }}
-            onClick={handleExcelCompleto} disabled={exporting}>
-            <FileSpreadsheet size={14} />
-            {exporting ? 'Exportando...' : 'Exportar TODO a Excel'}
-          </button>
+          <div style={{ display:'flex', gap:10 }}>
+            <button style={{ ...s.btnGhost, color:'#10b981', border:'1px solid #10b98144', background:'rgba(16,185,129,.05)' }}
+              onClick={handleExcelCompleto} disabled={exporting}>
+              <FileSpreadsheet size={16} />
+              {exporting ? 'Exportando...' : 'Excel Completo (Detallado)'}
+            </button>
+          </div>
         )}
       </div>
 
       {/* Filtros */}
-      <div style={s.filterCard}>
+      <div style={{ ...s.filterCard, position:'sticky', top:0, zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,.05)' }}>
         <div>
-          <label style={s.label}>Desde</label>
-          <input type="date" style={s.input} value={periodo.desde}
-            onChange={e => setPeriodo(p => ({ ...p, desde: e.target.value }))} />
+          <label style={s.label}>Período</label>
+          <div style={{ display:'flex', gap:6 }}>
+            {periodoOpts.map(opt => (
+              <button key={opt.label} onClick={() => { setPeriodo({ desde: opt.desde, hasta: opt.hasta }); setData(null) }}
+                style={{ ...s.btnGhost, fontSize:11, padding:'7px 12px',
+                  ...(periodo.desde===opt.desde && periodo.hasta===opt.hasta
+                    ? { background:'var(--accent)', color:'var(--accent-contrast)', border:'1px solid var(--accent)' }
+                    : {}) }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div>
-          <label style={s.label}>Hasta</label>
-          <input type="date" style={s.input} value={periodo.hasta}
-            onChange={e => setPeriodo(p => ({ ...p, hasta: e.target.value }))} />
-        </div>
-        {periodoOpts.map(opt => (
-          <button key={opt.label} onClick={() => setPeriodo({ desde: opt.desde, hasta: opt.hasta })}
-            style={{ ...s.btnGhost, fontSize:11, padding:'7px 12px',
-              ...(periodo.desde===opt.desde && periodo.hasta===opt.hasta
-                ? { background:'var(--accent-weak)', color:'var(--accent)', border:'1px solid var(--accent)' }
-                : {}) }}>
-            {opt.label}
+        <div style={{ flex:1 }} />
+        <div style={{ display:'flex', alignItems:'flex-end', gap:10 }}>
+          <div>
+            <label style={s.label}>Desde</label>
+            <input type="date" style={s.input} value={periodo.desde}
+              onChange={e => { setPeriodo(p => ({ ...p, desde: e.target.value })); setData(null) }} />
+          </div>
+          <div>
+            <label style={s.label}>Hasta</label>
+            <input type="date" style={s.input} value={periodo.hasta}
+              onChange={e => { setPeriodo(p => ({ ...p, hasta: e.target.value })); setData(null) }} />
+          </div>
+          <button style={{ ...s.btnPrimary, height:38, padding:'0 24px' }} onClick={cargar} disabled={loading}>
+            <RefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            {loading ? 'Procesando...' : 'Generar Todos los Reportes'}
           </button>
-        ))}
-        <button style={s.btnPrimary} onClick={cargar} disabled={loading}>
-          <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          {loading ? 'Cargando...' : 'Generar reportes'}
-        </button>
+        </div>
       </div>
 
       {!data && (
@@ -542,6 +575,41 @@ export default function Reportes() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+            }
+          </Seccion>
+
+          {/* 7. ASISTENCIA */}
+          <Seccion icon={Clock} titulo="Asistencia y Horas Activas del Personal" color="#3b82f6" defaultOpen={false}>
+            {asistencia.length === 0
+              ? <div style={s.noData}>Sin registros de asistencia en este periodo</div>
+              : <table style={s.table}>
+                  <thead><tr>
+                    <th style={s.th}>Personal</th>
+                    <th style={s.th}>Rol</th>
+                    <th style={s.th}>Ingreso</th>
+                    <th style={s.th}>Salida</th>
+                    <th style={s.th}>Estado</th>
+                  </tr></thead>
+                  <tbody>
+                    {asistencia.map(a => {
+                      const u = a.usuario || {}
+                      return (
+                        <tr key={a.id}>
+                          <td style={{ ...s.td, fontWeight:600 }}>{u.nombre || 'Usuario'} (@{u.username})</td>
+                          <td style={s.td}><span style={s.badge(u.rol==='ADMIN'?'#3b82f6':'#f59e0b')}>{u.rol}</span></td>
+                          <td style={{ ...s.td, color:'var(--text-soft)', fontSize:12 }}>{new Date(a.ingreso).toLocaleString('es-BO')}</td>
+                          <td style={{ ...s.td, color:'var(--text-soft)', fontSize:12 }}>{a.salida ? new Date(a.salida).toLocaleString('es-BO') : '—'}</td>
+                          <td style={s.td}>
+                            {a.activo
+                              ? <span style={s.badge('#10b981')}>Activo</span>
+                              : <span style={s.badge('#6b7280')}>Cerrado</span>
+                            }
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
             }

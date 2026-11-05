@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, User, Phone, Wrench, Calendar, Plus, Trash2, Pencil, ChevronRight, Clock, FileText, Package, CheckCircle, X } from 'lucide-react'
 import { api } from '../lib/apiClient'
+import { exportPDFCardDetalle } from '../lib/exportLib'
 import useAuthStore from '../store/authStore'
 import toast from 'react-hot-toast'
 
@@ -14,10 +15,24 @@ const ESTADOS = [
 ]
 
 const SERVICIOS = [
-  { value:'MANTENIMIENTO_BASICO',   label:'Mantenimiento Básico' },
-  { value:'MANTENIMIENTO_COMPLETO', label:'Mantenimiento Completo' },
-  { value:'CAMBIO_ACEITE',          label:'Cambio de Aceite' },
-  { value:'REPARACION_TELESCOPIO',  label:'Reparación de Telescopio' },
+  { value:'CAMBIO_ACEITE', label:'Cambio de aceite' },
+  { value:'REPARACION_MOTOR', label:'Reparación de motor' },
+  { value:'AJUSTE_VALVULAS', label:'Ajuste de válvulas' },
+  { value:'LIMPIEZA_CARBURADOR', label:'Limpieza de carburador' },
+  { value:'LIMPIEZA_INYECTORES', label:'Limpieza de inyectores' },
+  { value:'CAMBIO_KIT_TRANSMISION', label:'Cambio de kit de transmisión' },
+  { value:'CAMBIO_PASTILLAS', label:'Cambio de pastillas/zapatas' },
+  { value:'PURGA_FRENOS', label:'Purga de frenos' },
+  { value:'REPARACION_SUSPENSION', label:'Reparación de suspensión' },
+  { value:'REPARACION_ELECTRICA', label:'Reparación eléctrica' },
+  { value:'CAMBIO_BATERIA', label:'Cambio de batería' },
+  { value:'ESCANEO_COMPUTARIZADO', label:'Escaneo computarizado' },
+  { value:'LIMPIEZA_SISTEMA_INYECCION', label:'Limpieza de sistema de inyección' },
+  { value:'CAMBIO_LLANTAS', label:'Cambio de llantas' },
+  { value:'MANTENIMIENTO_BASICO', label:'Mantenimiento básico' },
+  { value:'MANTENIMIENTO_COMPLETO', label:'Mantenimiento completo' },
+  { value:'MANTENIMIENTO_DETALLADO', label:'Mantenimiento detallado' },
+  { value:'RESTAURACION', label:'Restauración' },
 ]
 
 const s = {
@@ -138,8 +153,16 @@ function ModalServicio({ token, cardId, servicio, onClose, onSaved }) {
 }
 
 // ── Modal Reemplazo con costo ─────────────────────────────────
-function ModalReemplazo({ token, cardId, insumos, onClose, onSaved }) {
-  const [form, setForm] = useState({ insumo_id:'', nombre:'', precio:'', costo:'', cantidad:1 })
+function ModalReemplazo({ token, cardId, insumos, reemplazo, onClose, onSaved }) {
+  const isEdit = !!reemplazo
+  const isAdmin = useAuthStore.getState().esAdmin()
+  const [form, setForm] = useState({
+    insumo_id: reemplazo?.insumo_id || '',
+    nombre: reemplazo?.nombre || '',
+    precio: reemplazo?.precio !== undefined ? reemplazo.precio : '',
+    costo: reemplazo?.costo !== undefined ? reemplazo.costo : '',
+    cantidad: reemplazo?.cantidad !== undefined ? reemplazo.cantidad : 1,
+  })
   const [saving, setSaving] = useState(false)
 
   const handleInsumo = (id) => {
@@ -152,19 +175,22 @@ function ModalReemplazo({ token, cardId, insumos, onClose, onSaved }) {
     e.preventDefault()
     if (!form.nombre || form.precio==='') { toast.error('Nombre y precio requeridos'); return }
     setSaving(true)
-    const res = await api.crearReemplazo({ token, data:{
-        card_id: cardId, insumo_id: form.insumo_id||null,
-        nombre: form.nombre, precio: parseFloat(form.precio),
-        costo: parseFloat(form.costo)||0,
-        cantidad: parseFloat(form.cantidad)||1,
-      }})
+    const data = {
+      card_id: cardId, insumo_id: form.insumo_id||null,
+      nombre: form.nombre, precio: parseFloat(form.precio),
+      costo: isAdmin ? (parseFloat(form.costo)||0) : 0,
+      cantidad: parseFloat(form.cantidad)||1,
+    }
+    const res = isEdit
+      ? await api.actualizarReemplazo({ token, id: reemplazo.id, data })
+      : await api.crearReemplazo({ token, data })
     setSaving(false)
     if (!res?.ok) { toast.error(res?.error||'Error'); return }
-    toast.success('Reemplazo agregado')
+    toast.success(isEdit ? 'Reemplazo actualizado' : 'Reemplazo agregado')
     onSaved()
   }
 
-  const margen = form.precio && form.costo
+  const margen = isAdmin && form.precio && form.costo
       ? ((parseFloat(form.precio) - parseFloat(form.costo)) / parseFloat(form.precio) * 100).toFixed(0)
       : null
 
@@ -172,32 +198,38 @@ function ModalReemplazo({ token, cardId, insumos, onClose, onSaved }) {
       <div style={s.overlay} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
         <div style={s.modal}>
           <div style={s.modalTitle}>
-            Agregar Reemplazo / Repuesto
+            {isEdit ? 'Editar Reemplazo' : 'Agregar Reemplazo / Repuesto'}
             <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}><X size={18}/></button>
           </div>
           <form onSubmit={handleSave}>
-            <label style={s.label}>Desde catálogo de inventario</label>
-            <select style={s.select} value={form.insumo_id} onChange={e=>handleInsumo(e.target.value)}>
-              <option value="">— Seleccionar del inventario —</option>
-              {insumos.map(i=><option key={i.id} value={i.id}>{i.nombre} — Bs. {i.precio}</option>)}
-            </select>
+            {!isEdit && (
+              <>
+                <label style={s.label}>Desde catálogo de inventario</label>
+                <select style={s.select} value={form.insumo_id} onChange={e=>handleInsumo(e.target.value)}>
+                  <option value="">— Seleccionar del inventario —</option>
+                  {insumos.map(i=><option key={i.id} value={i.id}>{i.nombre} — Bs. {i.precio}</option>)}
+                </select>
+              </>
+            )}
             <label style={s.label}>Nombre del repuesto *</label>
             <input style={s.input} value={form.nombre}
                    onChange={e=>setForm(f=>({...f,nombre:e.target.value}))}
                    placeholder="Ej: Filtro de aire, Bujía..." required />
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div style={{display:'grid',gridTemplateColumns:isAdmin?'1fr 1fr':'1fr',gap:10}}>
               <div>
                 <label style={s.label}>Precio al cliente (Bs.) *</label>
                 <input style={s.input} type="number" min="0" step="0.01" value={form.precio}
                        onChange={e=>setForm(f=>({...f,precio:e.target.value}))} placeholder="0.00" required />
               </div>
-              <div>
-                <label style={s.label}>Costo real (Bs.)</label>
-                <input style={s.input} type="number" min="0" step="0.01" value={form.costo}
-                       onChange={e=>setForm(f=>({...f,costo:e.target.value}))} placeholder="0.00" />
-              </div>
+              {isAdmin && (
+                <div>
+                  <label style={s.label}>Costo real (Bs.)</label>
+                  <input style={s.input} type="number" min="0" step="0.01" value={form.costo}
+                         onChange={e=>setForm(f=>({...f,costo:e.target.value}))} placeholder="0.00" />
+                </div>
+              )}
             </div>
-            {margen !== null && (
+            {isAdmin && margen !== null && (
                 <div style={{fontSize:12,color:parseFloat(margen)>=20?'var(--success)':'var(--warning)',marginTop:-8,marginBottom:12}}>
                   Margen: {margen}%
                 </div>
@@ -208,7 +240,7 @@ function ModalReemplazo({ token, cardId, insumos, onClose, onSaved }) {
             <div style={s.btnRow}>
               <button type="button" style={s.btnCancel} onClick={onClose}>Cancelar</button>
               <button type="submit" style={{...s.btnSave,opacity:saving?.6:1}} disabled={saving}>
-                {saving?'Guardando…':'Agregar'}
+                {saving?'Guardando…':isEdit?'Actualizar':'Agregar'}
               </button>
             </div>
           </form>
@@ -218,21 +250,30 @@ function ModalReemplazo({ token, cardId, insumos, onClose, onSaved }) {
 }
 
 // ── Modal Trabajo Externo ─────────────────────────────────────
-function ModalExterno({ token, cardId, onClose, onSaved }) {
-  const [form, setForm] = useState({ detalle:'', precio_final:'', costo:'' })
+function ModalExterno({ token, cardId, externo, onClose, onSaved }) {
+  const isEdit = !!externo
+  const isAdmin = useAuthStore.getState().esAdmin()
+  const [form, setForm] = useState({
+    detalle: externo?.detalle || '',
+    precio_final: externo?.precio_final !== undefined ? externo.precio_final : '',
+    costo: externo?.costo !== undefined ? externo.costo : '',
+  })
   const [saving, setSaving] = useState(false)
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
-    const res = await api.crearTrabajoExterno({ token, data:{
-        card_id: cardId, detalle: form.detalle,
-        precio_final: parseFloat(form.precio_final),
-        costo: parseFloat(form.costo)||0,
-      }})
+    const data = {
+      card_id: cardId, detalle: form.detalle,
+      precio_final: parseFloat(form.precio_final),
+      costo: isAdmin ? (parseFloat(form.costo)||0) : 0,
+    }
+    const res = isEdit
+      ? await api.actualizarTrabajoExterno({ token, id: externo.id, data })
+      : await api.crearTrabajoExterno({ token, data })
     setSaving(false)
     if (!res?.ok) { toast.error(res?.error||'Error'); return }
-    toast.success('Trabajo externo agregado')
+    toast.success(isEdit ? 'Trabajo externo actualizado' : 'Trabajo externo agregado')
     onSaved()
   }
 
@@ -240,7 +281,7 @@ function ModalExterno({ token, cardId, onClose, onSaved }) {
       <div style={s.overlay} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
         <div style={s.modal}>
           <div style={s.modalTitle}>
-            Agregar Trabajo Externo
+            {isEdit ? 'Editar Trabajo Externo' : 'Agregar Trabajo Externo'}
             <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}><X size={18}/></button>
           </div>
           <form onSubmit={handleSave}>
@@ -248,22 +289,24 @@ function ModalExterno({ token, cardId, onClose, onSaved }) {
             <textarea style={{...s.input,resize:'vertical',minHeight:70}} value={form.detalle}
                       onChange={e=>setForm(f=>({...f,detalle:e.target.value}))}
                       placeholder="Descripción del trabajo externo..." required />
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div style={{display:'grid',gridTemplateColumns:isAdmin?'1fr 1fr':'1fr',gap:10}}>
               <div>
                 <label style={s.label}>Precio al cliente (Bs.) *</label>
                 <input style={s.input} type="number" min="0" step="0.01" value={form.precio_final}
                        onChange={e=>setForm(f=>({...f,precio_final:e.target.value}))} placeholder="0.00" required />
               </div>
-              <div>
-                <label style={s.label}>Costo real (Bs.)</label>
-                <input style={s.input} type="number" min="0" step="0.01" value={form.costo}
-                       onChange={e=>setForm(f=>({...f,costo:e.target.value}))} placeholder="0.00" />
-              </div>
+              {isAdmin && (
+                <div>
+                  <label style={s.label}>Costo real (Bs.)</label>
+                  <input style={s.input} type="number" min="0" step="0.01" value={form.costo}
+                         onChange={e=>setForm(f=>({...f,costo:e.target.value}))} placeholder="0.00" />
+                </div>
+              )}
             </div>
             <div style={s.btnRow}>
               <button type="button" style={s.btnCancel} onClick={onClose}>Cancelar</button>
               <button type="submit" style={{...s.btnSave,opacity:saving?.6:1}} disabled={saving}>
-                {saving?'Guardando…':'Agregar'}
+                {saving?'Guardando…':isEdit?'Actualizar':'Agregar'}
               </button>
             </div>
           </form>
@@ -310,6 +353,141 @@ function ModalMecanico({ token, cardId, mecanicos, mecanicoActual, onClose, onSa
           </form>
         </div>
       </div>
+  )
+}
+
+// ── Modal Registrar Pago ───────────────────────────────────────
+function ModalPago({ token, cardId, pagadoActual, metodoActual, onClose, onSaved }) {
+  const [pagado, setPagado] = useState(pagadoActual)
+  const [metodo, setMetodo] = useState(metodoActual || 'EFECTIVO')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    const res = await api.actualizarCard({ token, id: cardId, data: {
+      pagado,
+      metodo_pago: pagado ? metodo : null,
+    }})
+    setSaving(false)
+    if (!res?.ok) { toast.error(res?.error || 'Error'); return }
+    toast.success(pagado ? 'Pago registrado exitosamente' : 'Pago marcado como pendiente')
+    onSaved()
+  }
+
+  return (
+    <div style={s.overlay} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div style={s.modal}>
+        <div style={s.modalTitle}>
+          Gestión de Pago
+          <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}><X size={18}/></button>
+        </div>
+        <form onSubmit={handleSave}>
+          <label style={s.label}>Estado de Pago</label>
+          <div style={{display:'flex',gap:10,marginBottom:14}}>
+            <button type="button" style={{flex:1,padding:'10px',borderRadius:8,border:`(pagado?1px solid var(--success):1px solid var(--border))`,background:pagado?'rgba(16,185,129,.15)':'transparent',color:pagado?'var(--success)':'var(--text-soft)',fontWeight:pagado?700:400,cursor:'pointer'}}
+              onClick={()=>setPagado(true)}>
+              ✓ Pagado
+            </button>
+            <button type="button" style={{flex:1,padding:'10px',borderRadius:8,border:`(!pagado?1px solid var(--danger):1px solid var(--border))`,background:!pagado?'rgba(239,68,68,.15)':'transparent',color:!pagado?'var(--danger)':'var(--text-soft)',fontWeight:!pagado?700:400,cursor:'pointer'}}
+              onClick={()=>setPagado(false)}>
+              ✕ Pendiente
+            </button>
+          </div>
+
+          {pagado && (
+            <>
+              <label style={s.label}>Método de Pago</label>
+              <select style={s.select} value={metodo} onChange={e=>setMetodo(e.target.value)}>
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="QR">QR</option>
+                <option value="TARJETA">Tarjeta</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </>
+          )}
+
+          <div style={s.btnRow}>
+            <button type="button" style={s.btnCancel} onClick={onClose}>Cancelar</button>
+            <button type="submit" style={{...s.btnSave,opacity:saving?.6:1}} disabled={saving}>
+              {saving ? 'Guardando…' : 'Guardar Pago'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+const VEHICULO_LABEL = { MOTO: 'Moto', TRIMOTO: 'Trimoto', CUADRATRACK: 'Cuadratrack' }
+
+function ModalMoto({ token, card, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    moto_marca: card.moto_marca || '',
+    moto_modelo: card.moto_modelo || '',
+    moto_color: card.moto_color || '',
+    tipo_vehiculo: card.tipo_vehiculo || 'MOTO',
+    cliente_nombre: card.cliente_nombre || '',
+    cliente_telefono: card.cliente_telefono || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    const res = await api.actualizarCard({ token, id: card.id, data: form })
+    setSaving(false)
+    if (!res?.ok) { toast.error(res?.error || 'Error'); return }
+    toast.success('Datos actualizados')
+    onSaved()
+  }
+
+  return (
+    <div style={s.overlay} onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div style={s.modal}>
+        <div style={s.modalTitle}>
+          Editar Datos del Vehículo y Cliente
+          <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}><X size={18}/></button>
+        </div>
+        <form onSubmit={handleSave}>
+          <label style={s.label}>Nombre del cliente *</label>
+          <input style={s.input} value={form.cliente_nombre} onChange={e=>setForm(f=>({...f,cliente_nombre:e.target.value}))} required />
+
+          <label style={s.label}>Tipo de Vehículo</label>
+          <select style={s.select} value={form.tipo_vehiculo} onChange={e=>setForm(f=>({...f,tipo_vehiculo:e.target.value}))}>
+            <option value="MOTO">🏍️ Moto</option>
+            <option value="TRIMOTO">🛺 Trimoto</option>
+            <option value="CUADRATRACK">🚜 Cuadratrack</option>
+          </select>
+
+          <label style={s.label}>Teléfono</label>
+          <input style={s.input} value={form.cliente_telefono} onChange={e=>setForm(f=>({...f,cliente_telefono:e.target.value}))} />
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+            <div>
+              <label style={s.label}>Marca</label>
+              <input style={s.input} value={form.moto_marca} onChange={e=>setForm(f=>({...f,moto_marca:e.target.value}))} placeholder="Honda" />
+            </div>
+            <div>
+              <label style={s.label}>Modelo</label>
+              <input style={s.input} value={form.moto_modelo} onChange={e=>setForm(f=>({...f,moto_modelo:e.target.value}))} placeholder="XR 150" />
+            </div>
+            <div>
+              <label style={s.label}>Color</label>
+              <input style={s.input} value={form.moto_color} onChange={e=>setForm(f=>({...f,moto_color:e.target.value}))} placeholder="Rojo" />
+            </div>
+          </div>
+
+          <div style={s.btnRow}>
+            <button type="button" style={s.btnCancel} onClick={onClose}>Cancelar</button>
+            <button type="submit" style={{...s.btnSave,opacity:saving?.6:1}} disabled={saving}>
+              {saving ? 'Guardando…' : 'Guardar Cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 
@@ -423,6 +601,11 @@ export default function CardDetalle() {
               <span style={s.badge(estadoInfo?.color||'#888')}>{estadoInfo?.label||card.estado}</span>
             </div>
             <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
+              {isFinalizado && (
+                  <button style={{...s.btnGhost, borderColor:'#ef4444', color:'#ef4444', background:'rgba(239,68,68,.08)', fontWeight:600}} onClick={()=>exportPDFCardDetalle(card)}>
+                    <FileText size={13}/> Imprimir Comprobante (PDF)
+                  </button>
+              )}
               {card.estado==='NUEVO' && esAdmin() && (
                   <button style={s.btnGhost} onClick={()=>setModal('mecanico')}>
                     <User size={13}/> Asignar mecánico
@@ -440,10 +623,22 @@ export default function CardDetalle() {
             </div>
           </div>
 
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:8,marginBottom:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:8,marginBottom:10}}>
             {card.cliente_telefono && <div style={s.metaRow}><Phone size={13} color="var(--accent)"/>{card.cliente_telefono}</div>}
             <div style={s.metaRow}><Calendar size={13} color="var(--accent)"/>{card.fecha}</div>
             {card.mecanico && <div style={s.metaRow}><User size={13} color="var(--accent)"/>{card.mecanico.nombre}</div>}
+          </div>
+
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:12,padding:'8px 12px',background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'var(--text-strong)'}}>
+              <span style={s.badge('#3b82f6')}>{VEHICULO_LABEL[card.tipo_vehiculo] || 'Moto'}</span>
+              <span><b>{card.moto_marca || '—'} {card.moto_modelo || ''} {card.moto_color ? `(${card.moto_color})` : ''}</b></span>
+            </div>
+            {!isFinalizado && (
+              <button style={{...s.btnEdit,padding:'3px 8px',fontSize:11}} onClick={()=>setModal('moto')}>
+                <Pencil size={11}/> Editar Vehículo / Cliente
+              </button>
+            )}
           </div>
 
           {/* Tipo de servicio editable */}
@@ -496,6 +691,35 @@ export default function CardDetalle() {
           )}
         </div>
 
+        {/* ESTADO DE PAGO */}
+        <div style={{
+          background: card.pagado ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
+          border: `1px solid ${card.pagado ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+          borderRadius: 12, padding: '14px 20px', marginBottom: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10
+        }}>
+          <div style={{display:'flex', alignItems:'center', gap:10}}>
+            <div style={{fontSize:18}}>{card.pagado ? '✅' : '⚠️'}</div>
+            <div>
+              <div style={{fontSize:14, fontWeight:'bold', color: card.pagado ? 'var(--success)' : 'var(--danger)'}}>
+                {card.pagado ? `PAGADO (${card.metodo_pago || 'EFECTIVO'})` : 'PENDIENTE DE PAGO'}
+              </div>
+              <div style={{fontSize:12, color:'var(--text-muted)', marginTop:2}}>
+                {card.pagado ? 'El cliente ha cancelado el monto total de esta orden.' : 'Esta orden aún no registra pago.'}
+              </div>
+            </div>
+          </div>
+          <button style={{
+            ...s.btnGhost,
+            borderColor: card.pagado ? 'var(--success)' : 'var(--danger)',
+            color: card.pagado ? 'var(--success)' : 'var(--danger)',
+            background: card.pagado ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+            fontWeight: 600
+          }} onClick={()=>setModal('pago')}>
+            {card.pagado ? 'Modificar pago' : 'Registrar pago'}
+          </button>
+        </div>
+
         {/* TOTAL */}
         <div style={{...s.totalBox,marginBottom:14}}>
           <div>
@@ -503,14 +727,16 @@ export default function CardDetalle() {
             <div style={{fontSize:12,color:'var(--text-soft)',lineHeight:1.8}}>
               Mano de obra: <b style={{color:'var(--text)'}}>Bs. {serv.toFixed(2)}</b><br/>
               Repuestos: <b style={{color:'var(--text)'}}>Bs. {remp.toFixed(2)}</b>
-              &nbsp;·&nbsp; Externos: <b style={{color:'var(--text)'}}>Bs. {ext.toFixed(2)}</b><br/>
-              Costo materiales: <b style={{color:'var(--danger)'}}>Bs. {costo.toFixed(2)}</b>
+              &nbsp;·&nbsp; Externos: <b style={{color:'var(--text)'}}>Bs. {ext.toFixed(2)}</b>
+              {esAdmin() && (
+                <><br/>Costo materiales: <b style={{color:'var(--danger)'}}>Bs. {costo.toFixed(2)}</b></>
+              )}
             </div>
           </div>
           <div style={{textAlign:'right'}}>
             <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:2}}>Total cobrado</div>
             <div style={{fontSize:24,fontWeight:'bold',color:'var(--accent)'}}>Bs. {total.toFixed(2)}</div>
-            <div style={{fontSize:12,color:'var(--success)',marginTop:4}}>Neto: Bs. {neto.toFixed(2)}</div>
+            {esAdmin() && <div style={{fontSize:12,color:'var(--success)',marginTop:4}}>Neto: Bs. {neto.toFixed(2)}</div>}
           </div>
         </div>
 
@@ -578,10 +804,10 @@ export default function CardDetalle() {
                   <thead><tr>
                     <th style={s.th}>Repuesto</th>
                     <th style={{...s.th,textAlign:'right'}}>Precio</th>
-                    <th style={{...s.th,textAlign:'right'}}>Costo</th>
+                    {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Costo</th>}
                     <th style={{...s.th,textAlign:'right'}}>Cant.</th>
                     <th style={{...s.th,textAlign:'right'}}>Subtotal</th>
-                    <th style={{...s.th,textAlign:'right'}}>Margen</th>
+                    {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Margen</th>}
                     {!isFinalizado && <th style={s.th}></th>}
                   </tr></thead>
                   <tbody>
@@ -594,30 +820,37 @@ export default function CardDetalle() {
                       <tr key={r.id}>
                         <td style={{...s.td,fontWeight:500}}>{r.nombre}</td>
                         <td style={{...s.td,textAlign:'right',color:'var(--text-soft)'}}>Bs. {r.precio}</td>
-                        <td style={{...s.td,textAlign:'right',color:'var(--danger)',fontSize:12}}>Bs. {r.costo||0}</td>
+                        {esAdmin() && <td style={{...s.td,textAlign:'right',color:'var(--danger)',fontSize:12}}>Bs. {r.costo||0}</td>}
                         <td style={{...s.td,textAlign:'right',color:'var(--text-soft)'}}>x{r.cantidad}</td>
                         <td style={s.tdNum}>Bs. {pTotal.toFixed(2)}</td>
-                        <td style={{...s.td,textAlign:'right'}}><span style={s.badge(margenColor)}>{margen}%</span></td>
+                        {esAdmin() && <td style={{...s.td,textAlign:'right'}}><span style={s.badge(margenColor)}>{margen}%</span></td>}
                         {!isFinalizado && (
-                            <td style={s.td}>
-                              <button style={s.btnDanger} onClick={()=>handleEliminarReemplazo(r.id)}>
-                                <Trash2 size={12}/>
-                              </button>
+                            <td style={{...s.td,textAlign:'right'}}>
+                              <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
+                                <button style={s.btnEdit} onClick={()=>{setModalData(r);setModal('reemplazo-edit')}}>
+                                  <Pencil size={12}/>
+                                </button>
+                                <button style={s.btnDanger} onClick={()=>handleEliminarReemplazo(r.id)}>
+                                  <Trash2 size={12}/>
+                                </button>
+                              </div>
                             </td>
                         )}
                       </tr>
                     )
                   })}
                   <tr>
-                    <td colSpan={4} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
+                    <td colSpan={esAdmin() ? 4 : 2} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
                     <td style={{...s.tdNum,fontWeight:700}}>Bs. {remp.toFixed(2)}</td>
-                    <td style={{...s.td,textAlign:'right'}}>{(() => {
-                      const pT = remp
-                      const cT = (card.reemplazos||[]).reduce((a,r)=>a+(r.costo||0)*r.cantidad,0)
-                      const m = pT > 0 ? ((pT - cT) / pT * 100).toFixed(0) : 0
-                      const mc = m >= 40 ? 'var(--success)' : m >= 20 ? 'var(--warning)' : 'var(--danger)'
-                      return <span style={s.badge(mc)}>{m}%</span>
-                    })()}</td>
+                    {esAdmin() && (
+                      <td style={{...s.td,textAlign:'right'}}>{(() => {
+                        const pT = remp
+                        const cT = (card.reemplazos||[]).reduce((a,r)=>a+(r.costo||0)*r.cantidad,0)
+                        const m = pT > 0 ? ((pT - cT) / pT * 100).toFixed(0) : 0
+                        const mc = m >= 40 ? 'var(--success)' : m >= 20 ? 'var(--warning)' : 'var(--danger)'
+                        return <span style={s.badge(mc)}>{m}%</span>
+                      })()}</td>
+                    )}
                     {!isFinalizado && <td style={s.td}/>}
                   </tr>
                   </tbody>
@@ -641,8 +874,8 @@ export default function CardDetalle() {
                   <thead><tr>
                     <th style={s.th}>Detalle</th>
                     <th style={{...s.th,textAlign:'right'}}>Precio</th>
-                    <th style={{...s.th,textAlign:'right'}}>Costo</th>
-                    <th style={{...s.th,textAlign:'right'}}>Margen</th>
+                    {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Costo</th>}
+                    {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Margen</th>}
                     {!isFinalizado && <th style={s.th}></th>}
                   </tr></thead>
                   <tbody>
@@ -652,25 +885,38 @@ export default function CardDetalle() {
                         <tr key={t.id}>
                           <td style={s.td}>{t.detalle}</td>
                           <td style={s.tdNum}>Bs. {t.precio_final}</td>
-                          <td style={{...s.td,textAlign:'right',color:'var(--danger)',fontSize:12}}>Bs. {t.costo||0}</td>
-                          <td style={{...s.td,textAlign:'right',fontWeight:600,color:margen>=0?'var(--success)':'var(--danger)'}}>
-                            Bs. {margen.toFixed(2)}
-                          </td>
+                          {esAdmin() && <td style={{...s.td,textAlign:'right',color:'var(--danger)',fontSize:12}}>Bs. {t.costo||0}</td>}
+                          {esAdmin() && (
+                            <td style={{...s.td,textAlign:'right',fontWeight:600,color:margen>=0?'var(--success)':'var(--danger)'}}>
+                              Bs. {margen.toFixed(2)}
+                            </td>
+                          )}
                           {!isFinalizado && (
-                              <td style={s.td}>
-                                <button style={s.btnDanger} onClick={()=>handleEliminarExterno(t.id)}>
-                                  <Trash2 size={12}/>
-                                </button>
+                              <td style={{...s.td,textAlign:'right'}}>
+                                <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
+                                  <button style={s.btnEdit} onClick={()=>{setModalData(t);setModal('externo-edit')}}>
+                                    <Pencil size={12}/>
+                                  </button>
+                                  <button style={s.btnDanger} onClick={()=>handleEliminarExterno(t.id)}>
+                                    <Trash2 size={12}/>
+                                  </button>
+                                </div>
                               </td>
                           )}
                         </tr>
                     )
                   })}
                   <tr>
-                    <td colSpan={3} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
+                    <td colSpan={esAdmin() ? 3 : 1} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
                     <td style={{...s.tdNum,fontWeight:700,color:'var(--accent)'}}>Bs. {ext.toFixed(2)}</td>
+                    {esAdmin() && <td style={s.td}/>}
                     {!isFinalizado && <td style={s.td}/>}
                   </tr>
+                  </tbody>
+                </table>
+              </div>
+          }
+        </div>
                   </tbody>
                 </table>
               </div>
@@ -715,17 +961,35 @@ export default function CardDetalle() {
                            onSaved={()=>{setModal(null);setModalData(null);load()}}/>
         )}
         {modal==='reemplazo' && (
-            <ModalReemplazo token={token} cardId={card.id} insumos={insumos}
+            <ModalReemplazo token={token} cardId={card.id} insumos={insumos} reemplazo={null}
                             onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load()}}/>
         )}
+        {modal==='reemplazo-edit' && modalData && (
+            <ModalReemplazo token={token} cardId={card.id} insumos={insumos} reemplazo={modalData}
+                            onClose={()=>{setModal(null);setModalData(null)}}
+                            onSaved={()=>{setModal(null);setModalData(null);load()}}/>
+        )}
         {modal==='externo' && (
-            <ModalExterno token={token} cardId={card.id}
+            <ModalExterno token={token} cardId={card.id} externo={null}
                           onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load()}}/>
+        )}
+        {modal==='externo-edit' && modalData && (
+            <ModalExterno token={token} cardId={card.id} externo={modalData}
+                          onClose={()=>{setModal(null);setModalData(null)}}
+                          onSaved={()=>{setModal(null);setModalData(null);load()}}/>
         )}
         {modal==='mecanico' && (
             <ModalMecanico token={token} cardId={card.id} mecanicos={mecanicos}
                            mecanicoActual={card.mecanico_id}
                            onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load()}}/>
+        )}
+        {modal==='pago' && (
+            <ModalPago token={token} cardId={card.id} pagadoActual={card.pagado} metodoActual={card.metodo_pago}
+                       onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load()}}/>
+        )}
+        {modal==='moto' && (
+            <ModalMoto token={token} card={card}
+                       onClose={()=>setModal(null)} onSaved={()=>{setModal(null);load()}}/>
         )}
       </div>
   )

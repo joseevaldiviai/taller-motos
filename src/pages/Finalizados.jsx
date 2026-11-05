@@ -5,10 +5,24 @@ import { api } from '../lib/apiClient'
 import useAuthStore from '../store/authStore'
 
 const SERVICIOS_LABEL = {
-  MANTENIMIENTO_BASICO:   'Mant. Básico',
-  MANTENIMIENTO_COMPLETO: 'Mant. Completo',
-  CAMBIO_ACEITE:          'Cambio Aceite',
-  REPARACION_TELESCOPIO:  'Rep. Telescopio',
+  CAMBIO_ACEITE:             'Cambio Aceite',
+  REPARACION_MOTOR:          'Rep. Motor',
+  AJUSTE_VALVULAS:           'Ajuste Válvulas',
+  LIMPIEZA_CARBURADOR:       'Limpieza Carburador',
+  LIMPIEZA_INYECTORES:       'Limp. Inyectores',
+  CAMBIO_KIT_TRANSMISION:    'Kit Transmisión',
+  CAMBIO_PASTILLAS:          'Pastillas/Zapatas',
+  PURGA_FRENOS:              'Purga Frenos',
+  REPARACION_SUSPENSION:     'Rep. Suspensión',
+  REPARACION_ELECTRICA:      'Rep. Eléctrica',
+  CAMBIO_BATERIA:            'Cambio Batería',
+  ESCANEO_COMPUTARIZADO:     'Escaneo',
+  LIMPIEZA_SISTEMA_INYECCION:'Limp. Inyección',
+  CAMBIO_LLANTAS:            'Cambio Llantas',
+  MANTENIMIENTO_BASICO:      'Mant. Básico',
+  MANTENIMIENTO_COMPLETO:    'Mant. Completo',
+  MANTENIMIENTO_DETALLADO:   'Mant. Detallado',
+  RESTAURACION:              'Restauración',
 }
 
 const s = {

@@ -8,10 +8,24 @@ const pct = (n) => `${n}%`
 const hoy = () => new Date().toLocaleDateString('es-BO')
 
 const SERVICIOS_LABEL = {
-  MANTENIMIENTO_BASICO:   'Mant. Básico',
-  MANTENIMIENTO_COMPLETO: 'Mant. Completo',
-  CAMBIO_ACEITE:          'Cambio Aceite',
-  REPARACION_TELESCOPIO:  'Rep. Telescopio',
+  CAMBIO_ACEITE:             'Cambio Aceite',
+  REPARACION_MOTOR:          'Rep. Motor',
+  AJUSTE_VALVULAS:           'Ajuste Válvulas',
+  LIMPIEZA_CARBURADOR:       'Limpieza Carburador',
+  LIMPIEZA_INYECTORES:       'Limp. Inyectores',
+  CAMBIO_KIT_TRANSMISION:    'Kit Transmisión',
+  CAMBIO_PASTILLAS:          'Pastillas/Zapatas',
+  PURGA_FRENOS:              'Purga Frenos',
+  REPARACION_SUSPENSION:     'Rep. Suspensión',
+  REPARACION_ELECTRICA:      'Rep. Eléctrica',
+  CAMBIO_BATERIA:            'Cambio Batería',
+  ESCANEO_COMPUTARIZADO:     'Escaneo',
+  LIMPIEZA_SISTEMA_INYECCION:'Limp. Inyección',
+  CAMBIO_LLANTAS:            'Cambio Llantas',
+  MANTENIMIENTO_BASICO:      'Mant. Básico',
+  MANTENIMIENTO_COMPLETO:    'Mant. Completo',
+  MANTENIMIENTO_DETALLADO:   'Mant. Detallado',
+  RESTAURACION:              'Restauración',
 }
 const ESTADOS_LABEL = {
   NUEVO:'Nuevo', EN_CURSO:'En Curso', PAUSADO:'Pausado',
@@ -307,117 +321,179 @@ export function exportPDFCards(data, periodo) {
 }
 
 // ── EXPORT EXCEL: Todo en uno (múltiples hojas) ────────────────
-export function exportExcelCompleto({ resumen, mecanicos, insumos, externos, cards, clientes = [], periodo }) {
+export function exportExcelCompleto({ resumen, mecanicos, insumos, externos, cards, clientes = [], asistencia = [], periodo }) {
   const wb = XLSX.utils.book_new()
 
-  // ── Hoja 1: Resumen ──
+  // ── Hoja 1: Resumen Ejecutivo ──
   const { totales, por_servicio, por_estado, por_mes } = resumen
   const wsResumen = XLSX.utils.aoa_to_sheet([
-    ['TALLER MOTOS — Reporte de Ingresos'],
+    ['TALLER MOTOS — REPORTE EJECUTIVO'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     ['Generado:', hoy()],
     [],
     ['TOTALES GENERALES'],
-    ['Métrica', 'Valor'],
-    ['Ingreso Total', totales.ingreso_total],
-    ['Costo Total', totales.costo_total],
-    ['Margen Bruto', totales.margen_bruto],
-    ['Cards Total', totales.cards_total],
-    ['Cards Finalizadas', totales.cards_finalizadas],
-    ['Ingreso Servicios', totales.ingreso_servicios],
-    ['Ingreso Reemplazos', totales.ingreso_reemplazos],
-    ['Ingreso Externos', totales.ingreso_externos],
+    ['Métrica', 'Valor', 'Descripción'],
+    ['Ingreso Total', totales.ingreso_total, 'Suma de servicios + reemplazos + externos'],
+    ['Costo Total', totales.costo_total, 'Costo de trabajos externos (de cards finalizadas)'],
+    ['Margen Bruto', totales.margen_bruto, 'Ingreso Total - Costo Externos'],
+    ['Cards Total', totales.cards_total, 'Todas las cards registradas en el período'],
+    ['Cards Finalizadas', totales.cards_finalizadas, 'Cards con estado FINALIZADO'],
+    ['Ingreso Servicios', totales.ingreso_servicios, 'Solo mano de obra'],
+    ['Ingreso Reemplazos', totales.ingreso_reemplazos, 'Venta de repuestos'],
+    ['Ingreso Externos', totales.ingreso_externos, 'Servicios de terceros facturados'],
     [],
-    ['INGRESOS POR MES'],
-    ['Mes', 'Órdenes', 'Ingreso'],
+    ['INGRESOS MENSUALES'],
+    ['Mes', 'Cards Finalizadas', 'Ingreso Bruto'],
     ...por_mes.map(m => [m.mes, m.cantidad, m.ingreso]),
     [],
-    ['POR TIPO DE SERVICIO'],
-    ['Servicio', 'Cantidad', 'Ingreso'],
-    ...Object.entries(por_servicio).map(([k, v]) => [SERVICIOS_LABEL[k] || k, v.cantidad, v.ingreso]),
+    ['DISTRIBUCIÓN POR TIPO DE SERVICIO'],
+    ['Servicio', 'Cantidad', 'Ingreso', '% Participación'],
+    ...Object.entries(por_servicio).map(([k, v]) => [
+      SERVICIOS_LABEL[k] || k,
+      v.cantidad,
+      v.ingreso,
+      totales.ingreso_total > 0 ? (v.ingreso / totales.ingreso_total) : 0
+    ]),
     [],
-    ['POR ESTADO'],
+    ['ESTADO ACTUAL DE CARDS'],
     ['Estado', 'Cantidad'],
     ...Object.entries(por_estado).map(([k, v]) => [ESTADOS_LABEL[k] || k, v]),
   ])
-  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen Ejecutivo')
 
-  // ── Hoja 2: Mecánicos ──
+  // ── Hoja 2: Mecánicos (Rendimiento) ──
   const wsMec = XLSX.utils.aoa_to_sheet([
-    ['REPORTE DE INGRESOS POR MECÁNICO'],
+    ['DESEMPEÑO Y FACTURACIÓN POR MECÁNICO'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     [],
-    ['Mecánico', 'Tipo Sueldo', 'Sueldo Base', 'Asignadas', 'Finalizadas', 'Ing. Servicios', 'Ing. Reemplazos', 'Ing. Externos', 'Costo Total', 'Margen', 'Margen %', 'Total Facturado'],
+    ['Mecánico', 'Tipo Sueldo', 'Sueldo Semanal / %', 'Cards Asignadas', 'Cards Finalizadas', 'Ing. Servicios', 'Ing. Reemplazos', 'Ing. Externos', 'Costo Total', 'Margen Bs.', 'Margen %', 'Total Facturado'],
     ...mecanicos.map(m => [
-      m.nombre, m.tipo_sueldo || '—', m.sueldo_base || 0,
+      m.nombre, m.tipo_sueldo || '—', m.sueldo_semanal || 0,
       m.cards_asignadas, m.cards_finalizadas,
       m.total_servicios, m.total_reemplazos, m.total_ext,
-      m.costo_total||0, m.margen||0, m.margen_pct||0, m.total_facturado,
+      m.costo_total||0, m.margen||0, (m.margen_pct||0)/100, m.total_facturado,
     ]),
     [],
-    ['DETALLE POR MECÁNICO'],
-    ['Mecánico', 'Cliente', 'Fecha', 'Servicio', 'Servicios', 'Reemplazos', 'Externos', 'Costo', 'Total'],
+    ['DETALLE POR ORDEN'],
+    ['Mecánico', 'ID Card', 'Cliente', 'Fecha', 'Servicio', 'Ing. Servicios', 'Ing. Reemplazos', 'Ing. Externos', 'Costo Directo', 'Total Bruto'],
     ...mecanicos.flatMap(m => (m.detalle || []).map(d => [
-      m.nombre, d.cliente_nombre, d.fecha,
+      m.nombre, d.card_id || '—', d.cliente_nombre, d.fecha,
       Array.isArray(d.tipo_servicio) ? d.tipo_servicio.map(t=>SERVICIOS_LABEL[t]||t).join(', ') : (SERVICIOS_LABEL[d.tipo_servicio] || d.tipo_servicio),
       d.total_servicios, d.total_reemplazos, d.total_externos, d.costo||0, d.total,
     ])),
   ])
   XLSX.utils.book_append_sheet(wb, wsMec, 'Mecánicos')
 
-  // ── Hoja 3: Insumos ──
-  const wsIns = XLSX.utils.aoa_to_sheet([
-    ['REPORTE DE INSUMOS / REEMPLAZOS'],
-    [`Período: ${periodo.desde} → ${periodo.hasta}`],
-    [],
-    ['Insumo', 'Veces Usado', 'Cantidad Total', 'Ingreso Total'],
-    ...insumos.map(i => [i.nombre, i.veces_usado, i.cantidad_total, i.ingreso_total]),
-    [],
-    ['TOTAL', '', insumos.reduce((a,i)=>a+i.cantidad_total,0), insumos.reduce((a,i)=>a+i.ingreso_total,0)],
-  ])
-  XLSX.utils.book_append_sheet(wb, wsIns, 'Insumos')
-
-  // ── Hoja 4: Externos ──
-  const { lista: extLista, total_ingresos, total_costos, margen_total } = externos
-  const wsExt = XLSX.utils.aoa_to_sheet([
-    ['REPORTE DE TRABAJOS EXTERNOS'],
-    [`Período: ${periodo.desde} → ${periodo.hasta}`],
-    [],
-    ['Detalle', 'Precio Final', 'Costo', 'Margen', 'Margen %', 'Card #', 'Fecha'],
-    ...extLista.map(t => [t.detalle, t.precio_final, t.costo||0, t.margen, t.margen_pct, t.card_id, t.creado_en?.slice(0,10)]),
-    [],
-    ['TOTALES', total_ingresos, total_costos, margen_total],
-  ])
-  XLSX.utils.book_append_sheet(wb, wsExt, 'Externos')
-
-  // ── Hoja 5: Órdenes ──
+  // ── Hoja 3: Listado Maestro de Órdenes ──
   const wsCards = XLSX.utils.aoa_to_sheet([
-    ['LISTADO DE ÓRDENES DE TRABAJO'],
+    ['LISTADO MAESTRO DE ÓRDENES DE TRABAJO'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     [],
-    ['#', 'Cliente', 'Teléfono', 'Fecha', 'Servicio', 'Estado', 'Mecánico', 'Serv. Real. Bs.', 'Reemplazos Bs.', 'Externos Bs.', 'Total Bs.'],
+    ['ID', 'Cliente', 'Teléfono', 'Fecha', 'Servicios (Categorías)', 'Estado', 'Mecánico', 'Mano de Obra (Bs)', 'Repuestos (Bs)', 'Externos (Bs)', 'Total (Bs)'],
     ...cards.map(c => [
       c.id, c.cliente_nombre, c.cliente_telefono, c.fecha,
-      SERVICIOS_LABEL[c.tipo_servicio] || c.tipo_servicio,
+      Array.isArray(c.tipo_servicio) ? c.tipo_servicio.map(t=>SERVICIOS_LABEL[t]||t).join(', ') : (SERVICIOS_LABEL[c.tipo_servicio] || c.tipo_servicio),
       ESTADOS_LABEL[c.estado] || c.estado,
       c.mecanico, c.total_servicios||0, c.total_reemplazos, c.total_externos, c.total,
     ]),
-    [],
-    ['', '', '', '', '', '', 'TOTAL', '', '', '', cards.reduce((a,c)=>a+c.total,0)],
   ])
-  XLSX.utils.book_append_sheet(wb, wsCards, 'Órdenes')
+  XLSX.utils.book_append_sheet(wb, wsCards, 'Listado Órdenes')
 
-  // ── Hoja 6: Clientes ──
-  const wsCli = XLSX.utils.aoa_to_sheet([
-    ['REPORTE DE CLIENTES'],
+  // ── Hoja 4: Detalle de Repuestos (Reemplazos) ──
+  const repuestosDetalle = []
+  cards.forEach(c => {
+    if (!c.reemplazos) return
+    c.reemplazos.forEach(r => {
+      repuestosDetalle.push([
+        c.id, c.cliente_nombre, c.fecha, r.nombre, r.cantidad, r.precio, r.cantidad * r.precio
+      ])
+    })
+  })
+  const wsRep = XLSX.utils.aoa_to_sheet([
+    ['DETALLE DE REPUESTOS / REEMPLAZOS UTILIZADOS'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     [],
-    ['#', 'Cliente', 'Teléfono', 'Visitas', 'Total Gastado', 'Ticket Promedio'],
+    ['Card ID', 'Cliente', 'Fecha', 'Repuesto', 'Cantidad', 'Precio Unit.', 'Subtotal'],
+    ...repuestosDetalle,
+    [],
+    ['', '', '', '', '', 'TOTAL', repuestosDetalle.reduce((a,r)=>a+r[6], 0)]
+  ])
+  XLSX.utils.book_append_sheet(wb, wsRep, 'Detalle Repuestos')
+
+  // ── Hoja 5: Detalle de Mano de Obra (Servicios) ──
+  const serviciosDetalle = []
+  cards.forEach(c => {
+    if (!c.servicios_realizados) return
+    c.servicios_realizados.forEach(s => {
+      serviciosDetalle.push([
+        c.id, c.cliente_nombre, c.fecha, s.nombre, s.precio
+      ])
+    })
+  })
+  const wsServ = XLSX.utils.aoa_to_sheet([
+    ['DETALLE DE SERVICIOS / MANO DE OBRA REALIZADA'],
+    [`Período: ${periodo.desde} → ${periodo.hasta}`],
+    [],
+    ['Card ID', 'Cliente', 'Fecha', 'Trabajo Realizado', 'Precio (Bs)'],
+    ...serviciosDetalle,
+    [],
+    ['', '', '', 'TOTAL', serviciosDetalle.reduce((a,s)=>a+s[4], 0)]
+  ])
+  XLSX.utils.book_append_sheet(wb, wsServ, 'Detalle Mano Obra')
+
+  // ── Hoja 6: Inventario (Ranking) ──
+  const wsIns = XLSX.utils.aoa_to_sheet([
+    ['RANKING DE INSUMOS MÁS UTILIZADOS'],
+    [`Período: ${periodo.desde} → ${periodo.hasta}`],
+    [],
+    ['Insumo / Pieza', 'Veces Utilizado (Ordenes)', 'Cantidad Total Vendida', 'Ingreso Total Bruto'],
+    ...insumos.map(i => [i.nombre, i.veces_usado, i.cantidad_total, i.ingreso_total]),
+    [],
+    ['TOTALES', '', insumos.reduce((a,i)=>a+i.cantidad_total,0), insumos.reduce((a,i)=>a+i.ingreso_total,0)],
+  ])
+  XLSX.utils.book_append_sheet(wb, wsIns, 'Ranking Insumos')
+
+  // ── Hoja 7: Trabajos Externos ──
+  const { lista: extLista, total_ingresos, total_costos, margen_total } = externos
+  const wsExt = XLSX.utils.aoa_to_sheet([
+    ['REPORTE DETALLADO DE TRABAJOS EXTERNOS (TERCEROS)'],
+    [`Período: ${periodo.desde} → ${periodo.hasta}`],
+    [],
+    ['Detalle Trabajo', 'Ingreso (Precio Final)', 'Costo (Taller)', 'Margen (Bs.)', 'Margen %', 'Card #', 'Fecha'],
+    ...extLista.map(t => [t.detalle, t.precio_final, t.costo||0, t.margen, (t.margen_pct||0)/100, t.card_id, t.creado_en?.slice(0,10)]),
+    [],
+    ['TOTALES', total_ingresos, total_costos, margen_total],
+  ])
+  XLSX.utils.book_append_sheet(wb, wsExt, 'Trabajos Externos')
+
+  // ── Hoja 8: Clientes ──
+  const wsCli = XLSX.utils.aoa_to_sheet([
+    ['FIDELIZACIÓN Y FRECUENCIA DE CLIENTES'],
+    [`Período: ${periodo.desde} → ${periodo.hasta}`],
+    [],
+    ['Rank', 'Cliente', 'Teléfono', 'Visitas (Ordenes)', 'Total Facturado (Bs)', 'Ticket Promedio'],
     ...clientes.map((c, i) => [i+1, c.cliente_nombre, c.cliente_telefono||'', c.visitas, c.total_gastado, c.visitas>0?+(c.total_gastado/c.visitas).toFixed(2):0]),
   ])
-  XLSX.utils.book_append_sheet(wb, wsCli, 'Clientes')
+  XLSX.utils.book_append_sheet(wb, wsCli, 'Frecuencia Clientes')
 
-  XLSX.writeFile(wb, `taller-motos-reporte-completo-${periodo.desde}-${periodo.hasta}.xlsx`)
+  // ── Hoja 9: Asistencia ──
+  const wsAsis = XLSX.utils.aoa_to_sheet([
+    ['REGISTRO DE ASISTENCIA Y HORAS ACTIVAS'],
+    [`Período: ${periodo.desde} → ${periodo.hasta}`],
+    [],
+    ['Personal', 'Usuario', 'Rol', 'Ingreso', 'Salida', 'Estado'],
+    ...(asistencia || []).map(a => [
+      a.usuario?.nombre || '—',
+      a.usuario?.username || '—',
+      a.usuario?.rol || '—',
+      new Date(a.ingreso).toLocaleString('es-BO'),
+      a.salida ? new Date(a.salida).toLocaleString('es-BO') : '—',
+      a.activo ? 'ACTIVO' : 'CERRADO',
+    ]),
+  ])
+  XLSX.utils.book_append_sheet(wb, wsAsis, 'Asistencia')
+
+  XLSX.writeFile(wb, `taller-motos-reporte-DETALLADO-${periodo.desde}-${periodo.hasta}.xlsx`)
 }
 
 // ── Exports individuales Excel ─────────────────────────────────
@@ -491,8 +567,8 @@ export function exportExcelMecanicos(data, periodo) {
     ['REPORTE DE INGRESOS POR MECÁNICO'],
     [`Período: ${periodo.desde} → ${periodo.hasta}`],
     [],
-    ['Mecánico','Tipo Sueldo','Sueldo Base','Asignadas','Finalizadas','Ing. Servicios','Ing. Reemplazos','Ing. Externos','Costo Total','Margen','Margen %','Total Facturado'],
-    ...data.map(m=>[m.nombre,m.tipo_sueldo||'—',m.sueldo_base||0,m.cards_asignadas,m.cards_finalizadas,m.total_servicios,m.total_reemplazos,m.total_ext,m.costo_total||0,m.margen||0,m.margen_pct||0,m.total_facturado]),
+    ['Mecánico','Tipo Sueldo','Sueldo Semanal','Asignadas','Finalizadas','Ing. Servicios','Ing. Reemplazos','Ing. Externos','Costo Total','Margen','Margen %','Total Facturado'],
+    ...data.map(m=>[m.nombre,m.tipo_sueldo||'—',m.sueldo_semanal||0,m.cards_asignadas,m.cards_finalizadas,m.total_servicios,m.total_reemplazos,m.total_ext,m.costo_total||0,m.margen||0,m.margen_pct||0,m.total_facturado]),
     [],
     ['TOTALES','','','','','',
       data.reduce((a,m)=>a+m.total_servicios,0),
@@ -543,4 +619,111 @@ export function exportExcelExternos(data, periodo) {
   ])
   XLSX.utils.book_append_sheet(wb, ws, 'Externos')
   XLSX.writeFile(wb, `externos-${periodo.desde}-${periodo.hasta}.xlsx`)
+}
+
+export function exportPDFCardDetalle(card) {
+  const doc = crearPDF(`Comprobante de Orden de Trabajo #${card.id}`, `Cliente: ${card.cliente_nombre}  |  Fecha: ${card.fecha}`)
+  
+  let y = 52
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text('DATOS DE LA ORDEN', 14, y)
+  y += 6
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.text(`Cliente: ${card.cliente_nombre}`, 14, y)
+  doc.text(`Teléfono: ${card.cliente_telefono || '—'}`, 110, y)
+  y += 5
+  doc.text(`Estado: ${ESTADOS_LABEL[card.estado] || card.estado}`, 14, y)
+  doc.text(`Mecánico: ${card.mecanico?.nombre || '—'}`, 110, y)
+  y += 5
+  const tipos = Array.isArray(card.tipo_servicio) ? card.tipo_servicio.map(t=>SERVICIOS_LABEL[t]||t).join(', ') : (SERVICIOS_LABEL[card.tipo_servicio] || card.tipo_servicio)
+  doc.text(`Tipo de Servicio: ${tipos || '—'}`, 14, y)
+  y += 5
+  const estadoPago = card.pagado ? `PAGADO (${card.metodo_pago || 'EFECTIVO'})` : 'PENDIENTE DE PAGO'
+  doc.text(`Estado de Pago: ${estadoPago}`, 14, y)
+  y += 8
+
+  if (card.notas) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('Notas:', 14, y)
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    doc.text(card.notas, 14, y, { maxWidth: 180 })
+    y += 10
+  }
+
+  // Servicios Realizados
+  if (card.servicios_realizados?.length > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('Servicios Realizados (Mano de Obra)', 14, y)
+    y += 2
+    autoTable(doc, {
+      startY: y,
+      head: [['Servicio', 'Descripción', 'Precio']],
+      body: card.servicios_realizados.map(s => [s.nombre, s.descripcion || '—', bs(s.precio)]),
+      theme: 'grid',
+      headStyles: { fillColor: [15, 29, 41] },
+      styles: { fontSize: 8 },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  // Reemplazos
+  if (card.reemplazos?.length > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('Repuestos y Reemplazos', 14, y)
+    y += 2
+    autoTable(doc, {
+      startY: y,
+      head: [['Repuesto', 'Cantidad', 'Precio Unit.', 'Subtotal']],
+      body: card.reemplazos.map(r => [r.nombre, r.cantidad, bs(r.precio), bs(r.precio * r.cantidad)]),
+      theme: 'grid',
+      headStyles: { fillColor: [15, 29, 41] },
+      styles: { fontSize: 8 },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  // Trabajos Externos
+  if (card.trabajos_externos?.length > 0) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('Trabajos Externos', 14, y)
+    y += 2
+    autoTable(doc, {
+      startY: y,
+      head: [['Detalle', 'Precio Final']],
+      body: card.trabajos_externos.map(t => [t.detalle, bs(t.precio_final)]),
+      theme: 'grid',
+      headStyles: { fillColor: [15, 29, 41] },
+      styles: { fontSize: 8 },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  // Totales
+  const serv = (card.servicios_realizados||[]).reduce((a,s)=>a+(s.precio||0),0)
+  const remp = (card.reemplazos||[]).reduce((a,r)=>a+r.precio*r.cantidad,0)
+  const ext  = (card.trabajos_externos||[]).reduce((a,t)=>a+t.precio_final,0)
+  const total = serv + remp + ext
+
+  if (y > 250) {
+    doc.addPage()
+    y = 20
+  }
+
+  doc.setFillColor(240, 243, 246)
+  doc.rect(14, y, 182, 22, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(15, 29, 41)
+  doc.text('RESUMEN DE COBRO', 20, y + 7)
+  doc.setFontSize(11)
+  doc.text(`TOTAL A PAGAR: ${bs(total)}`, 190, y + 14, { align: 'right' })
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Mano de Obra: ${bs(serv)}  |  Repuestos: ${bs(remp)}  |  Externos: ${bs(ext)}`, 20, y + 15)
+
+  doc.save(`orden-trabajo-${card.id}-${card.cliente_nombre.replace(/\s+/g, '_')}.pdf`)
 }

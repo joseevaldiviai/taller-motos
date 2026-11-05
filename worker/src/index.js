@@ -104,10 +104,18 @@ export default {
       })
       if (authErr) return err('Contraseña incorrecta', 401)
 
+      // Registrar ingreso en asistencia
+      await supabase.from('asistencia').insert({
+        usuario_id: profile.id,
+        ingreso: new Date().toISOString(),
+        activo: true,
+      })
+
       const sessionId = crypto.randomUUID()
+      const tokenDuration = profile.rol === 'MECANICO' ? 3 * 3600 : 3600
       const token = await signJwt({
         sub: profile.id, rol: profile.rol, session_id: sessionId,
-        exp: Math.floor(Date.now()/1000) + 3600,
+        exp: Math.floor(Date.now()/1000) + tokenDuration,
       }, env.JWT_SECRET)
       const refreshToken = await signJwt({
         sub: profile.id, type: 'refresh', session_id: sessionId,
@@ -132,9 +140,10 @@ export default {
       if (!profile) return err('Usuario inactivo', 401)
 
       const sessionId = crypto.randomUUID()
+      const tokenDuration = profile.rol === 'MECANICO' ? 3 * 3600 : 3600
       const token = await signJwt({
         sub: profile.id, rol: profile.rol, session_id: sessionId,
-        exp: Math.floor(Date.now()/1000) + 3600,
+        exp: Math.floor(Date.now()/1000) + tokenDuration,
       }, env.JWT_SECRET)
       const newRefresh = await signJwt({
         sub: profile.id, type: 'refresh', session_id: sessionId,
@@ -154,6 +163,13 @@ export default {
     }
 
     if (path === '/auth/logout' && method === 'POST') {
+      const auth = await authenticate(req, env)
+      if (auth) {
+        await sb(env).from('asistencia')
+          .update({ activo: false, salida: new Date().toISOString() })
+          .eq('usuario_id', auth.sub)
+          .eq('activo', true)
+      }
       return ok({ message: 'Sesión cerrada' })
     }
 
@@ -182,7 +198,7 @@ export default {
     if (path === '/users' && method === 'POST') {
       if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
       const d = body.data || {}
-      const { email, username, nombre, rol, password, tipo_sueldo, sueldo_base } = d
+      const { email, username, nombre, rol, password, tipo_sueldo, sueldo_semanal } = d
       if (!email || !username || !nombre || !rol || !password) return err('Faltan campos')
 
       const { data: existingUser } = await supabase
@@ -197,9 +213,7 @@ export default {
       const { error: profileErr } = await supabase.from('user_profiles').insert({
         id: authData.user.id, email, username, nombre, rol,
         tipo_sueldo: rol === 'MECANICO' ? tipo_sueldo : null,
-        sueldo_base: rol === 'MECANICO' ? sueldo_base : null,
-        sueldo_semanal: rol === 'MECANICO' ? (d.sueldo_semanal || null) : null,
-
+        sueldo_semanal: rol === 'MECANICO' ? (sueldo_semanal || null) : null,
         activo: true,
       })
       if (profileErr) return err(profileErr.message)
@@ -214,7 +228,7 @@ export default {
       if (d.nombre) update.nombre = d.nombre
       if (d.rol)    update.rol    = d.rol
       if (d.tipo_sueldo !== undefined) update.tipo_sueldo = d.tipo_sueldo
-      if (d.sueldo_base !== undefined) update.sueldo_base = d.sueldo_base
+      if (d.sueldo_semanal !== undefined) update.sueldo_semanal = d.sueldo_semanal
       if (d.activo  !== undefined) update.activo  = d.activo
       const { error } = await supabase.from('user_profiles').update(update).eq('id', id)
       if (error) return err(error.message)
@@ -288,12 +302,29 @@ export default {
       const { data, error } = await supabase.from('cards').insert({
         cliente_nombre: d.cliente_nombre,
         cliente_telefono: d.cliente_telefono,
+        moto_marca: d.moto_marca || null,
+        moto_modelo: d.moto_modelo || null,
+        moto_color: d.moto_color || null,
+        tipo_vehiculo: d.tipo_vehiculo || 'MOTO',
         fecha: d.fecha || new Date().toISOString().slice(0,10),
         tipo_servicio: tipo_servicio2,
         notas: d.notas,
         estado: 'NUEVO',
       }).select().single()
       if (error) return err(error.message)
+
+      // Si hay otros_servicios personalizados, insertarlos en servicios_realizados
+      if (Array.isArray(d.otros_servicios) && d.otros_servicios.length > 0) {
+        const customServices = d.otros_servicios.filter(os => os.nombre?.trim()).map(os => ({
+          card_id: data.id,
+          nombre: os.nombre.trim(),
+          descripcion: os.descripcion?.trim() || '',
+          precio: parseFloat(os.precio) || 0,
+        }))
+        if (customServices.length > 0) {
+          await supabase.from('servicios_realizados').insert(customServices)
+        }
+      }
 
       await supabase.from('trabajos_realizados').insert({
         card_id: data.id, mecanico_id: auth.sub,
@@ -316,7 +347,7 @@ export default {
     if (path.startsWith('/cards/') && method === 'PATCH' && !path.includes('/estado')) {
       const id = path.split('/')[2]
       const d = body.data || {}
-      const allowed = ['cliente_nombre','cliente_telefono','fecha','tipo_servicio','notas']
+      const allowed = ['cliente_nombre','cliente_telefono','moto_marca','moto_modelo','moto_color','tipo_vehiculo','fecha','tipo_servicio','notas','pagado','metodo_pago']
       const update = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       update.actualizado_en = new Date().toISOString()
       const { error } = await supabase.from('cards').update(update).eq('id', id)
@@ -397,10 +428,23 @@ export default {
       const d = body.data || {}
       const { data, error } = await supabase.from('reemplazos').insert({
         card_id: d.card_id, insumo_id: d.insumo_id || null,
-        nombre: d.nombre, precio: d.precio, cantidad: d.cantidad || 1,
+        nombre: d.nombre, precio: d.precio, costo: d.costo || 0, cantidad: d.cantidad || 1,
       }).select().single()
       if (error) return err(error.message)
       return ok(data)
+    }
+
+    if (path.startsWith('/reemplazos/') && method === 'PATCH') {
+      const id = path.split('/')[2]
+      const d = body.data || {}
+      const update = {}
+      if (d.nombre !== undefined) update.nombre = d.nombre
+      if (d.precio !== undefined) update.precio = parseFloat(d.precio)
+      if (d.costo !== undefined) update.costo = parseFloat(d.costo)
+      if (d.cantidad !== undefined) update.cantidad = parseFloat(d.cantidad)
+      const { error } = await supabase.from('reemplazos').update(update).eq('id', id)
+      if (error) return err(error.message)
+      return ok({ message: 'Reemplazo actualizado' })
     }
 
     if (path.startsWith('/reemplazos/') && method === 'DELETE') {
@@ -419,6 +463,18 @@ export default {
       }).select().single()
       if (error) return err(error.message)
       return ok(data)
+    }
+
+    if (path.startsWith('/trabajos-externos/') && method === 'PATCH') {
+      const id = path.split('/')[2]
+      const d = body.data || {}
+      const update = {}
+      if (d.detalle !== undefined) update.detalle = d.detalle
+      if (d.precio_final !== undefined) update.precio_final = parseFloat(d.precio_final)
+      if (d.costo !== undefined) update.costo = parseFloat(d.costo)
+      const { error } = await supabase.from('trabajos_externos').update(update).eq('id', id)
+      if (error) return err(error.message)
+      return ok({ message: 'Trabajo externo actualizado' })
     }
 
     if (path.startsWith('/trabajos-externos/') && method === 'DELETE') {
@@ -495,7 +551,7 @@ export default {
       const desde = url.searchParams.get('desde') || '2000-01-01'
       const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
       const { data: mecanicos } = await supabase.from('user_profiles')
-        .select('id,nombre,tipo_sueldo,sueldo_base').eq('rol','MECANICO').eq('activo',true)
+        .select('id,nombre,tipo_sueldo,sueldo_semanal').eq('rol','MECANICO').eq('activo',true)
       const { data: cards } = await supabase.from('cards')
         .select('mecanico_id,estado,fecha,tipo_servicio,cliente_nombre,servicios_realizados(precio),reemplazos(precio,costo,cantidad),trabajos_externos(precio_final,costo)')
         .gte('fecha', desde).lte('fecha', hasta)
@@ -521,7 +577,7 @@ export default {
                    costo:cost, total:serv+remp+ext }
         })
         return {
-          id:m.id, nombre:m.nombre, tipo_sueldo:m.tipo_sueldo, sueldo_base:m.sueldo_base,
+          id:m.id, nombre:m.nombre, tipo_sueldo:m.tipo_sueldo, sueldo_semanal:m.sueldo_semanal,
           cards_asignadas:propias.length, cards_finalizadas:fin2.length,
           total_servicios, total_reemplazos, total_ext, total_facturado,
           costo_total, margen, margen_pct: total_facturado>0?Math.round((margen/total_facturado)*100):0,
@@ -623,17 +679,43 @@ export default {
     if (path === '/compras' && method === 'POST') {
       const d = body.data || {}
       if (!d.descripcion || !d.costo_unit) return err('Faltan campos: descripcion, costo_unit')
+      const cantidad = parseFloat(d.cantidad) || 1
+      const costo_unit = parseFloat(d.costo_unit)
+
       const { data, error } = await supabase.from('compras').insert({
         descripcion:   d.descripcion,
         categoria:     d.categoria || 'CONSUMIBLE',
-        cantidad:      parseInt(d.cantidad) || 1,
-        costo_unit:    parseFloat(d.costo_unit),
+        cantidad:      cantidad,
+        costo_unit:    costo_unit,
         proveedor:     d.proveedor || null,
         notas:         d.notas || null,
         fecha:         d.fecha || new Date().toISOString().slice(0,10),
         registrado_por: auth.sub,
       }).select().single()
       if (error) return err(error.message)
+
+      // Si es REPUESTO o INSUMO, sincronizar con inventario (insumos)
+      if (d.categoria === 'REPUESTO' || d.categoria === 'INSUMO') {
+        const nombreItem = d.descripcion.trim()
+        const { data: existente } = await supabase.from('insumos')
+          .select('id, stock')
+          .ilike('nombre', nombreItem)
+          .maybeSingle()
+
+        if (existente) {
+          const nuevoStock = Number(existente.stock || 0) + cantidad
+          await supabase.from('insumos').update({ stock: nuevoStock }).eq('id', existente.id)
+        } else {
+          const precioSugerido = Number((costo_unit * 1.3).toFixed(2))
+          await supabase.from('insumos').insert({
+            nombre: nombreItem,
+            precio: precioSugerido,
+            stock: cantidad,
+            activo: true,
+          })
+        }
+      }
+
       return ok(data)
     }
 
@@ -676,6 +758,33 @@ export default {
         total_gasto: lista.reduce((a,c) => a + c.costo_total, 0),
         por_categoria,
       })
+    }
+
+    // ── ASISTENCIA ────────────────────────────────────────────
+    if (path === '/asistencia' && method === 'GET') {
+      if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
+      const desde = url.searchParams.get('desde') || '2000-01-01'
+      const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
+      const { data, error } = await supabase.from('asistencia')
+        .select('*, usuario:usuario_id(id, nombre, username, rol)')
+        .gte('ingreso', desde + 'T00:00:00')
+        .lte('ingreso', hasta + 'T23:59:59')
+        .order('ingreso', { ascending: false })
+      if (error) return err(error.message)
+      return ok(data)
+    }
+
+    if (path === '/reportes/asistencia' && method === 'GET') {
+      if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
+      const desde = url.searchParams.get('desde') || '2000-01-01'
+      const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
+      const { data, error } = await supabase.from('asistencia')
+        .select('*, usuario:usuario_id(id, nombre, username, rol)')
+        .gte('ingreso', desde + 'T00:00:00')
+        .lte('ingreso', hasta + 'T23:59:59')
+        .order('ingreso', { ascending: false })
+      if (error) return err(error.message)
+      return ok(data)
     }
     // ── NOTIFICACIONES IN-APP ─────────────────────────────────
     if (path === '/notificaciones' && method === 'GET') {

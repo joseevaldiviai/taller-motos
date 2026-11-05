@@ -42,7 +42,7 @@ function ModalUsuario({ token, usuario, onClose, onSaved }) {
     email:        usuario?.email || '',
     rol:          usuario?.rol || 'MECANICO',
     tipo_sueldo:  usuario?.tipo_sueldo || 'FIJO',
-    sueldo_semanal: usuario?.sueldo_semanal || usuario?.sueldo_base || '',
+    sueldo_semanal: usuario?.sueldo_semanal || '',
     password:     '',
   })
   const [saving, setSaving] = useState(false)
@@ -226,11 +226,11 @@ export default function Usuarios() {
                           {u.rol==='MECANICO' && u.tipo_sueldo
                               ? <div>
                                 <span style={s.badge(s.sueldoColors[u.tipo_sueldo]||'#888')}>{u.tipo_sueldo}</span>
-                                {(u.sueldo_semanal || u.sueldo_base) && (
+                                {u.sueldo_semanal && (
                                     <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>
                                       {u.tipo_sueldo==='FIJO'
-                                          ? `Bs. ${u.sueldo_semanal || u.sueldo_base}/semana`
-                                          : `${u.sueldo_semanal || u.sueldo_base}% de servicios`
+                                          ? `Bs. ${u.sueldo_semanal}/semana`
+                                          : `${u.sueldo_semanal}% de servicios`
                                       }
                                     </div>
                                 )}

@@ -35,7 +35,7 @@ function ModalInsumo({ token, insumo, onClose, onSaved }) {
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
-    const data = { nombre: form.nombre, precio: parseFloat(form.precio), stock: parseInt(form.stock) || 0 }
+    const data = { nombre: form.nombre, precio: parseFloat(form.precio), stock: parseFloat(form.stock) || 0 }
     const res = isEdit
       ? await api.actualizarInsumo({ token, id: insumo.id, data })
       : await api.crearInsumo({ token, data })
@@ -59,7 +59,7 @@ function ModalInsumo({ token, insumo, onClose, onSaved }) {
             </div>
             <div>
               <label style={s.label}>Stock</label>
-              <input style={s.input} type="number" min="0" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} placeholder="0" />
+              <input style={s.input} type="number" min="0" step="0.01" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} placeholder="0.00" />
             </div>
           </div>
           <div style={s.btnRow}>

@@ -59,16 +59,21 @@ function ModalCompra({ token, compra, onClose, onSaved }) {
     e.preventDefault()
     if (!form.descripcion || !form.costo_unit) { toast.error('Descripción y costo son requeridos'); return }
     setSaving(true)
+    const data = {
+      ...form,
+      cantidad: parseFloat(form.cantidad) || 1,
+      costo_unit: parseFloat(form.costo_unit) || 0,
+    }
     const res = isEdit
-      ? await api.actualizarCompra({ token, id: compra.id, data: form })
-      : await api.crearCompra({ token, data: form })
+      ? await api.actualizarCompra({ token, id: compra.id, data })
+      : await api.crearCompra({ token, data })
     setSaving(false)
     if (!res?.ok) { toast.error(res?.error || 'Error'); return }
     toast.success(isEdit ? 'Compra actualizada' : 'Compra registrada')
     onSaved()
   }
 
-  const total = (parseFloat(form.costo_unit) || 0) * (parseInt(form.cantidad) || 1)
+  const total = (parseFloat(form.costo_unit) || 0) * (parseFloat(form.cantidad) || 0)
 
   return (
     <div style={s.overlay} onClick={e=>{ if(e.target===e.currentTarget) onClose() }}>
@@ -89,7 +94,7 @@ function ModalCompra({ token, compra, onClose, onSaved }) {
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
             <div>
               <label style={s.label}>Cantidad *</label>
-              <input style={s.input} type="number" min="1" value={form.cantidad}
+              <input style={s.input} type="number" min="0.01" step="0.01" value={form.cantidad}
                 onChange={e=>setForm(f=>({...f,cantidad:e.target.value}))} required />
             </div>
             <div>

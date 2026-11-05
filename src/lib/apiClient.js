@@ -110,9 +110,11 @@ export const api = {
   eliminarServicioRealizado: ({ token, id }) => request(`/servicios-realizados/${id}`, { method: 'DELETE', token }),
 
   crearReemplazo: ({ token, data }) => request('/reemplazos', { method: 'POST', token, body: { data } }),
+  actualizarReemplazo: ({ token, id, data }) => request(`/reemplazos/${id}`, { method: 'PATCH', token, body: { data } }),
   eliminarReemplazo: ({ token, id }) => request(`/reemplazos/${id}`, { method: 'DELETE', token }),
 
   crearTrabajoExterno: ({ token, data }) => request('/trabajos-externos', { method: 'POST', token, body: { data } }),
+  actualizarTrabajoExterno: ({ token, id, data }) => request(`/trabajos-externos/${id}`, { method: 'PATCH', token, body: { data } }),
   eliminarTrabajoExterno: ({ token, id }) => request(`/trabajos-externos/${id}`, { method: 'DELETE', token }),
 
   configGet: ({ token }) => request('/config', { token }),
@@ -130,6 +132,9 @@ export const api = {
   actualizarCompra: ({ token, id, data }) => request(`/compras/${id}`, { method:'PATCH', token, body:{ data } }),
   eliminarCompra:   ({ token, id }) => request(`/compras/${id}`, { method:'DELETE', token }),
   reporteCompras:   ({ token, desde, hasta }) => request(`/reportes/compras?desde=${desde}&hasta=${hasta}`, { token }),
+
+  listarAsistencia: ({ token, desde, hasta }) => request(`/asistencia?desde=${desde}&hasta=${hasta}`, { token }),
+  reporteAsistencia: ({ token, desde, hasta }) => request(`/reportes/asistencia?desde=${desde}&hasta=${hasta}`, { token }),
 }
 
 export { getStoredSession, refreshSession, storeSession }

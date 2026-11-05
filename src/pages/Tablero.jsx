@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, RefreshCw, User, Phone, Wrench, Clock, Search, X, ChevronDown } from 'lucide-react'
+import { Plus, RefreshCw, User, Phone, Wrench, Clock, Search, X, ChevronDown, Trash2 } from 'lucide-react'
 import { api } from '../lib/apiClient'
 import useAuthStore from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -15,10 +15,24 @@ const ESTADOS = [
 ]
 
 const SERVICIOS = [
-  { value:'MANTENIMIENTO_BASICO',   label:'Mantenimiento Básico' },
-  { value:'MANTENIMIENTO_COMPLETO', label:'Mantenimiento Completo' },
-  { value:'CAMBIO_ACEITE',          label:'Cambio de Aceite' },
-  { value:'REPARACION_TELESCOPIO',  label:'Reparación de Telescopio' },
+  { value:'CAMBIO_ACEITE', label:'Cambio de aceite' },
+  { value:'REPARACION_MOTOR', label:'Reparación de motor' },
+  { value:'AJUSTE_VALVULAS', label:'Ajuste de válvulas' },
+  { value:'LIMPIEZA_CARBURADOR', label:'Limpieza de carburador' },
+  { value:'LIMPIEZA_INYECTORES', label:'Limpieza de inyectores' },
+  { value:'CAMBIO_KIT_TRANSMISION', label:'Cambio de kit de transmisión' },
+  { value:'CAMBIO_PASTILLAS', label:'Cambio de pastillas/zapatas' },
+  { value:'PURGA_FRENOS', label:'Purga de frenos' },
+  { value:'REPARACION_SUSPENSION', label:'Reparación de suspensión' },
+  { value:'REPARACION_ELECTRICA', label:'Reparación eléctrica' },
+  { value:'CAMBIO_BATERIA', label:'Cambio de batería' },
+  { value:'ESCANEO_COMPUTARIZADO', label:'Escaneo computarizado' },
+  { value:'LIMPIEZA_SISTEMA_INYECCION', label:'Limpieza de sistema de inyección' },
+  { value:'CAMBIO_LLANTAS', label:'Cambio de llantas' },
+  { value:'MANTENIMIENTO_BASICO', label:'Mantenimiento básico' },
+  { value:'MANTENIMIENTO_COMPLETO', label:'Mantenimiento completo' },
+  { value:'MANTENIMIENTO_DETALLADO', label:'Mantenimiento detallado' },
+  { value:'RESTAURACION', label:'Restauración' },
 ]
 
 const s = {
@@ -99,9 +113,12 @@ export default function Tablero() {
   const [filtroEstado, setFiltroEstado] = useState('')
   const [form, setForm] = useState({
     cliente_nombre:'', cliente_telefono:'',
+    moto_marca:'', moto_modelo:'', moto_color:'',
+    tipo_vehiculo:'MOTO',
     fecha: new Date().toISOString().slice(0,10),
-    tipo_servicio:['MANTENIMIENTO_BASICO'], notas:'',
+    tipo_servicio:['CAMBIO_ACEITE'], notas:'',
   })
+  const [otrosServicios, setOtrosServicios] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -143,12 +160,13 @@ export default function Tablero() {
     e.preventDefault()
     if (!form.cliente_nombre.trim()) { toast.error('El nombre del cliente es requerido'); return }
     setSaving(true)
-    const res = await api.crearCard({ token, data: form })
+    const res = await api.crearCard({ token, data: { ...form, otros_servicios: otrosServicios } })
     setSaving(false)
     if (!res?.ok) { toast.error(res?.error||'Error'); return }
     toast.success('Orden creada — agrega los servicios desde la card')
     setShowModal(false)
-    setForm({ cliente_nombre:'', cliente_telefono:'', fecha:new Date().toISOString().slice(0,10), tipo_servicio:['MANTENIMIENTO_BASICO'], notas:'' })
+    setForm({ cliente_nombre:'', cliente_telefono:'', moto_marca:'', moto_modelo:'', moto_color:'', tipo_vehiculo:'MOTO', fecha:new Date().toISOString().slice(0,10), tipo_servicio:['CAMBIO_ACEITE'], notas:'' })
+    setOtrosServicios([])
     load()
   }
 
@@ -268,6 +286,28 @@ export default function Tablero() {
                 required
               />
 
+              <label style={s.label}>Tipo de Vehículo</label>
+              <select style={s.select} value={form.tipo_vehiculo} onChange={e=>setForm(f=>({...f,tipo_vehiculo:e.target.value}))}>
+                <option value="MOTO">🏍️ Moto</option>
+                <option value="TRIMOTO">🛺 Trimoto</option>
+                <option value="CUADRATRACK">🚜 Cuadratrack</option>
+              </select>
+
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                <div>
+                  <label style={s.label}>Marca moto</label>
+                  <input style={s.input} value={form.moto_marca} onChange={e=>setForm(f=>({...f,moto_marca:e.target.value}))} placeholder="Ej: Honda"/>
+                </div>
+                <div>
+                  <label style={s.label}>Modelo</label>
+                  <input style={s.input} value={form.moto_modelo} onChange={e=>setForm(f=>({...f,moto_modelo:e.target.value}))} placeholder="Ej: XR 150"/>
+                </div>
+                <div>
+                  <label style={s.label}>Color</label>
+                  <input style={s.input} value={form.moto_color} onChange={e=>setForm(f=>({...f,moto_color:e.target.value}))} placeholder="Ej: Rojo"/>
+                </div>
+              </div>
+
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <div>
                   <label style={s.label}>Teléfono</label>
@@ -296,6 +336,36 @@ export default function Tablero() {
                     </button>
                   )
                 })}
+              </div>
+
+              <div style={{marginTop:12,marginBottom:12,borderTop:'1px solid var(--border)',paddingTop:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                  <label style={{...s.label,margin:0}}>Servicios Adicionales (Selección y Precio)</label>
+                  <button type="button" style={{...s.btnGhost,fontSize:11,padding:'3px 8px'}} onClick={()=>setOtrosServicios(o=>[...o, {nombre:SERVICIOS[0].label, descripcion:'', precio:''}]))}>
+                    + Agregar servicio
+                  </button>
+                </div>
+                {otrosServicios.map((os, idx) => (
+                  <div key={idx} style={{display:'grid',gridTemplateColumns:'1.5fr 1.5fr 1fr 30px',gap:6,marginBottom:6,alignItems:'center'}}>
+                    <select style={{...s.select,margin:0}} value={os.nombre} onChange={e=>{
+                      const v = e.target.value
+                      setOtrosServicios(list => list.map((item, i) => i===idx ? {...item, nombre:v} : item))
+                    }}>
+                      {SERVICIOS.map(sv=><option key={sv.value} value={sv.label}>{sv.label}</option>)}
+                    </select>
+                    <input style={{...s.input,margin:0}} placeholder="Descripción (opc.)" value={os.descripcion} onChange={e=>{
+                      const v = e.target.value
+                      setOtrosServicios(list => list.map((item, i) => i===idx ? {...item, descripcion:v} : item))
+                    }}/>
+                    <input style={{...s.input,margin:0}} type="number" min="0" step="0.01" placeholder="Precio Bs." value={os.precio} onChange={e=>{
+                      const v = e.target.value
+                      setOtrosServicios(list => list.map((item, i) => i===idx ? {...item, precio:v} : item))
+                    }}/>
+                    <button type="button" style={{background:'none',border:'none',color:'var(--danger)',cursor:'pointer',padding:4}} onClick={()=>setOtrosServicios(list=>list.filter((_,i)=>i!==idx))}>
+                      <Trash2 size={16}/>
+                    </button>
+                  </div>
+                ))}
               </div>
 
               <label style={s.label}>Notas iniciales</label>

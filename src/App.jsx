@@ -12,6 +12,7 @@ import Perfil from './pages/Perfil'
 import NotFound from './pages/NotFound'
 import Finalizados from './pages/Finalizados'
 import Compras from './pages/Compras'
+import Asistencia from './pages/Asistencia'
 
 const Reportes = lazy(() => import('./pages/Reportes'))
 
@@ -52,9 +53,10 @@ export default function App() {
           <Route path="tablero" element={<Tablero />} />
           <Route path="cards/:id" element={<CardDetalle />} />
           <Route path="usuarios" element={<RequireAdmin><Usuarios /></RequireAdmin>} />
-          <Route path="insumos" element={<RequireAdmin><Insumos /></RequireAdmin>} />
+          <Route path="insumos" element={<Insumos />} />
           <Route path="finalizados" element={<Finalizados />} />
           <Route path="compras" element={<Compras />} />
+          <Route path="asistencia" element={<RequireAdmin><Asistencia /></RequireAdmin>} />
           <Route path="reportes" element={<RequireAdmin><Suspense fallback={<div style={{padding:60,textAlign:"center",color:"var(--text-muted)"}}>Cargando reportes…</div>}><Reportes /></Suspense></RequireAdmin>} />
           <Route path="perfil" element={<Perfil />} />
         </Route>
