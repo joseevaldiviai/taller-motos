@@ -76,9 +76,14 @@ function CardFinalizado({ card, onVer }) {
 
       {/* Header verde oscuro */}
       <div style={s.cardTop}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8, gap:6, flexWrap:'wrap' }}>
           <span style={{ fontSize:11, color:'rgba(255,255,255,.5)' }}>#{card.id}</span>
-          <span style={{ ...s.badge('#10b981'), background:'rgba(16,185,129,.2)', color:'#a8f1d8' }}>✓ Finalizado</span>
+          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+            <span style={{ ...s.badge('#10b981'), background:'rgba(16,185,129,.2)', color:'#a8f1d8' }}>✓ Finalizado</span>
+            <span style={{ ...s.badge(card.pagado ? '#10b981' : '#ef4444'), background: card.pagado ? 'rgba(16,185,129,.2)' : 'rgba(239,68,68,.2)', color: card.pagado ? '#a8f1d8' : '#fca5a5' }}>
+              {card.pagado ? '✓ Pagado' : '⚠️ Pendiente'}
+            </span>
+          </div>
         </div>
         <div style={{ fontSize:17, fontWeight:'bold', color:'#ffffff', marginBottom:4 }}>{card.cliente_nombre}</div>
         <div style={{ fontSize:12, color:'rgba(255,255,255,.6)' }}>{servLbl}</div>

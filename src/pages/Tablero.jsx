@@ -91,8 +91,13 @@ function CardKanban({ card, onClick, onCambiarEstado }) {
       draggable="true"
       onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
       onClick={()=>onClick(card.id)}>
-      <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,alignItems:'center'}}>
-        <span style={s.badge(estado?.color||'#888')}>{estado?.label||card.estado}</span>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,alignItems:'center',gap:4,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+          <span style={s.badge(estado?.color||'#888')}>{estado?.label||card.estado}</span>
+          <span style={s.badge(card.pagado ? '#10b981' : '#ef4444')}>
+            {card.pagado ? '✓ Pagado' : '⚠️ Pendiente'}
+          </span>
+        </div>
         <div style={{display:'flex',gap:3}} onClick={e=>e.stopPropagation()}>
           {prevEstado && (
             <button title="Mover anterior" style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,fontSize:10,padding:'1px 5px',cursor:'pointer',color:'var(--text-soft)'}}
