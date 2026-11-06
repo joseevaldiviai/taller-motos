@@ -749,7 +749,18 @@ export default function CardDetalle() {
                 <button style={s.btnGhost} onClick={()=>setModal('servicio')}><Plus size={13}/> Agregar</button>
             )}
           </div>
-          {!(card.servicios_realizados?.length)
+          {(() => {
+            const serviciosList = (card.servicios_realizados?.length > 0)
+              ? card.servicios_realizados
+              : (card.tipo_servicio || []).map((t, idx) => ({
+                  id: `virtual-${idx}`,
+                  nombre: SERVICIOS.find(s => s.value === t)?.label || t,
+                  descripcion: 'Servicio solicitado',
+                  precio: 0,
+                  isVirtual: true,
+                }))
+
+            return serviciosList.length === 0
               ? <TablaVacia msg="Sin servicios registrados"/>
               : <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -760,20 +771,29 @@ export default function CardDetalle() {
                     {!isFinalizado && <th style={s.th}></th>}
                   </tr></thead>
                   <tbody>
-                  {card.servicios_realizados.map(sv=>(
+                  {serviciosList.map(sv=>(
                       <tr key={sv.id}>
                         <td style={{...s.td,fontWeight:600,color:'var(--text-strong)'}}>{sv.nombre}</td>
                         <td style={{...s.td,color:'var(--text-soft)',fontSize:12}}>{sv.descripcion||'—'}</td>
-                        <td style={s.tdNum}>Bs. {parseFloat(sv.precio).toFixed(2)}</td>
+                        <td style={s.tdNum}>Bs. {parseFloat(sv.precio||0).toFixed(2)}</td>
                         {!isFinalizado && (
                             <td style={{...s.td,textAlign:'right'}}>
                               <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
-                                <button style={s.btnEdit} onClick={()=>{setModalData(sv);setModal('servicio-edit')}}>
-                                  <Pencil size={12}/>
-                                </button>
-                                <button style={s.btnDanger} onClick={()=>handleEliminarServicio(sv.id)}>
-                                  <Trash2 size={12}/>
-                                </button>
+                                {sv.isVirtual ? (
+                                  <button style={{...s.btnPrimary,fontSize:11,padding:'4px 8px'}} onClick={async () => {
+                                    const res = await api.crearServicioRealizado({ token, data: { card_id: card.id, nombre: sv.nombre, descripcion: sv.descripcion, precio: 0 } })
+                                    if (res?.ok) { toast.success('Servicio agregado'); load() }
+                                  }}>Agregar</button>
+                                ) : (
+                                  <>
+                                    <button style={s.btnEdit} onClick={()=>{setModalData(sv);setModal('servicio-edit')}}>
+                                      <Pencil size={12}/>
+                                    </button>
+                                    <button style={s.btnDanger} onClick={()=>handleEliminarServicio(sv.id)}>
+                                      <Trash2 size={12}/>
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                         )}
@@ -787,7 +807,7 @@ export default function CardDetalle() {
                   </tbody>
                 </table>
               </div>
-          }
+          })()}
         </div>
 
         {/* REEMPLAZOS */}
