@@ -76,17 +76,42 @@ function calcTotal(card) {
   return serv+remp+ext
 }
 
-function CardKanban({ card, onClick }) {
+function CardKanban({ card, onClick, onCambiarEstado }) {
   const estado  = ESTADOS.find(e=>e.key===card.estado)
   const tipos = Array.isArray(card.tipo_servicio) ? card.tipo_servicio : (card.tipo_servicio ? [card.tipo_servicio] : [])
   const total   = calcTotal(card)
+
+  const estadosKeys = ESTADOS.map(e => e.key)
+  const currentIndex = estadosKeys.indexOf(card.estado)
+  const prevEstado = currentIndex > 0 ? estadosKeys[currentIndex - 1] : null
+  const nextEstado = currentIndex < estadosKeys.length - 1 ? estadosKeys[currentIndex + 1] : null
+
   return (
-    <div className="kanban-card" onClick={()=>onClick(card.id)}>
-      <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+    <div className="kanban-card"
+      draggable="true"
+      onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
+      onClick={()=>onClick(card.id)}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,alignItems:'center'}}>
         <span style={s.badge(estado?.color||'#888')}>{estado?.label||card.estado}</span>
-        <span style={{fontSize:9,color:'var(--text-muted)'}}>#{card.id}</span>
+        <div style={{display:'flex',gap:3}} onClick={e=>e.stopPropagation()}>
+          {prevEstado && (
+            <button title="Mover anterior" style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,fontSize:10,padding:'1px 5px',cursor:'pointer',color:'var(--text-soft)'}}
+              onClick={()=>onCambiarEstado(card.id, prevEstado)}>
+              ◀
+            </button>
+          )}
+          {nextEstado && (
+            <button title="Mover siguiente" style={{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:4,fontSize:10,padding:'1px 5px',cursor:'pointer',color:'var(--text-soft)'}}
+              onClick={()=>onCambiarEstado(card.id, nextEstado)}>
+              ▶
+            </button>
+          )}
+        </div>
       </div>
       <div style={s.cardName}>{card.cliente_nombre}</div>
+      {(card.moto_marca || card.moto_modelo) && (
+        <div style={s.cardMeta}><Wrench size={10}/>{card.moto_marca} {card.moto_modelo} {card.moto_color ? `(${card.moto_color})` : ''}</div>
+      )}
       {card.cliente_telefono && <div style={s.cardMeta}><Phone size={10}/>{card.cliente_telefono}</div>}
       {tipos.map(t => {
         const sv = SERVICIOS.find(s=>s.value===t)
@@ -129,9 +154,24 @@ export default function Tablero() {
     if (resCards.ok) setCards(resCards.data||[])
     if (resMec.ok) setMecanicos((resMec.data||[]).filter(u=>u.rol==='MECANICO'&&u.activo))
     setLoading(false)
-  }, [token])
+  }, [token, esAdmin])
 
   useEffect(() => { load() }, [load])
+
+  const handleCambiarEstadoKanban = async (cardId, nuevoEstado) => {
+    const card = cards.find(c => String(c.id) === String(cardId))
+    if (!card || card.estado === nuevoEstado) return
+    const res = await api.cambiarEstadoCard({
+      token,
+      id: cardId,
+      estado: nuevoEstado,
+      mecanico_id: card.mecanico_id,
+      nota: `Movido en tablero a ${nuevoEstado}`,
+    })
+    if (!res?.ok) { toast.error(res?.error || 'Error al mover orden'); return }
+    toast.success(`Orden #${cardId} movida a ${nuevoEstado}`)
+    load()
+  }
 
   // Filtrado reactivo
   const cardsFiltradas = useMemo(() => {
@@ -246,14 +286,20 @@ export default function Tablero() {
             {ESTADOS.map(est=>{
               const cols = cardsPorEstado(est.key)
               return (
-                <div key={est.key} className="kanban-col">
+                <div key={est.key} className="kanban-col"
+                  onDragOver={e=>e.preventDefault()}
+                  onDrop={async e=>{
+                    e.preventDefault()
+                    const cardId = e.dataTransfer.getData('text/plain')
+                    if (cardId) await handleCambiarEstadoKanban(cardId, est.key)
+                  }}>
                   <div className="kanban-col-header" style={s.colHeader(est.color)}>
                     <span>{est.label}</span>
                     <span style={s.badge(est.color)}>{cols.length}</span>
                   </div>
                   {cols.length === 0
                     ? <div style={s.emptyCol}>Sin órdenes</div>
-                    : cols.map(card=><CardKanban key={card.id} card={card} onClick={id=>navigate(`/cards/${id}`)}/>)
+                    : cols.map(card=><CardKanban key={card.id} card={card} onClick={id=>navigate(`/cards/${id}`)} onCambiarEstado={handleCambiarEstadoKanban}/>)
                   }
                 </div>
               )
@@ -341,7 +387,7 @@ export default function Tablero() {
               <div style={{marginTop:12,marginBottom:12,borderTop:'1px solid var(--border)',paddingTop:12}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                   <label style={{...s.label,margin:0}}>Servicios Adicionales (Selección y Precio)</label>
-                  <button type="button" style={{...s.btnGhost,fontSize:11,padding:'3px 8px'}} onClick={()=>setOtrosServicios(o=>[...o, {nombre:SERVICIOS[0].label, descripcion:'', precio:''}]))}>
+                  <button type="button" style={{...s.btnGhost,fontSize:11,padding:'3px 8px'}} onClick={()=>setOtrosServicios(o=>[...o, {nombre:SERVICIOS[0].label, descripcion:'', precio:''}])}>
                     + Agregar servicio
                   </button>
                 </div>

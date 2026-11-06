@@ -917,11 +917,6 @@ export default function CardDetalle() {
               </div>
           }
         </div>
-                  </tbody>
-                </table>
-              </div>
-          }
-        </div>
 
         {/* HISTORIAL */}
         <div style={s.card}>
