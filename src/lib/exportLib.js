@@ -321,7 +321,7 @@ export function exportPDFCards(data, periodo) {
 }
 
 // ── EXPORT EXCEL: Todo en uno (múltiples hojas) ────────────────
-export function exportExcelCompleto({ resumen, mecanicos, insumos, externos, cards, clientes = [], asistencia = [], periodo }) {
+export function exportExcelCompleto({ resumen, mecanicos, insumos, externos, cards, clientes = [], asistencia = [], pl = null, periodo }) {
   const wb = XLSX.utils.book_new()
 
   // ── Hoja 1: Resumen Ejecutivo ──
@@ -493,7 +493,117 @@ export function exportExcelCompleto({ resumen, mecanicos, insumos, externos, car
   ])
   XLSX.utils.book_append_sheet(wb, wsAsis, 'Asistencia')
 
+  // ── Hoja 10: Ganancias y Pérdidas (P&L) ──
+  if (pl) {
+    const { ingresos, costos_mercaderia, gastos_operativos, resumen_financiero } = pl
+    const wsPL = XLSX.utils.aoa_to_sheet([
+      ['BALANCE DE GANANCIAS Y PÉRDIDAS (P&L)'],
+      [`Período: ${periodo.desde} → ${periodo.hasta}`],
+      ['Generado:', hoy()],
+      [],
+      ['CONCEPTO FINANCIERO', 'MONTO (Bs.)'],
+      ['1. INGRESOS BRUTOS', ''],
+      ['   - Ingresos por Servicios (Mano de obra)', ingresos.servicios],
+      ['   - Ingresos por Reemplazos / Repuestos', ingresos.reemplazos],
+      ['   - Ingresos por Trabajos Externos', ingresos.externos],
+      ['   TOTAL INGRESOS (A)', ingresos.total],
+      [],
+      ['2. COSTOS DIRECTOS DE MERCADERÍA', ''],
+      ['   - Costo de Repuestos Vendidos', costos_mercaderia.repuestos],
+      ['   - Costo de Trabajos Externos', costos_mercaderia.externos],
+      ['   TOTAL COSTOS DIRECTOS (B)', costos_mercaderia.total],
+      [],
+      ['3. GASTOS OPERATIVOS / TALLER', ''],
+      ['   - Compras y Gastos Operativos', gastos_operativos.compras_taller],
+      ['   - Sueldos del Personal', gastos_operativos.sueldos_personal],
+      ['   TOTAL GASTOS OPERATIVOS (C)', gastos_operativos.total],
+      [],
+      ['4. RESUMEN Y UTILIDAD NETA', ''],
+      ['   Total Ingresos (A)', ingresos.total],
+      ['   Total Costos y Gastos (B + C)', resumen_financiero.costo_total_general],
+      ['   UTILIDAD / GANANCIA NETA', resumen_financiero.utilidad_neta],
+      ['   Margen de Utilidad Neta (%)', `${resumen_financiero.margen_neto_pct}%`],
+    ])
+    XLSX.utils.book_append_sheet(wb, wsPL, 'Ganancias y Pérdidas')
+  }
+
   XLSX.writeFile(wb, `taller-motos-reporte-DETALLADO-${periodo.desde}-${periodo.hasta}.xlsx`)
+}
+
+export function exportPDFGananciasPerdidas(pl, periodo) {
+  const doc = crearPDF('Balance de Ganancias y Pérdidas (P&L)', `Período: ${periodo.desde} → ${periodo.hasta}`)
+  const { ingresos, costos_mercaderia, gastos_operativos, resumen_financiero } = pl
+
+  let y = 52
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text('ESTADO DE RESULTADOS CONTABLE', 14, y)
+  y += 6
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Concepto Financiero', 'Monto (Bs.)']],
+    body: [
+      ['1. INGRESOS BRUTOS', ''],
+      ['   - Ingresos por Servicios (Mano de obra)', bs(ingresos.servicios)],
+      ['   - Ingresos por Repuestos / Reemplazos', bs(ingresos.reemplazos)],
+      ['   - Ingresos por Trabajos Externos', bs(ingresos.externos)],
+      ['   TOTAL INGRESOS (A)', bs(ingresos.total)],
+      ['2. COSTOS DIRECTOS DE MERCADERÍA', ''],
+      ['   - Costo de Repuestos Vendidos', bs(costos_mercaderia.repuestos)],
+      ['   - Costo de Trabajos Externos', bs(costos_mercaderia.externos)],
+      ['   TOTAL COSTOS DIRECTOS (B)', bs(costos_mercaderia.total)],
+      ['3. GASTOS OPERATIVOS / TALLER', ''],
+      ['   - Compras y Gastos Operativos', bs(gastos_operativos.compras_taller)],
+      ['   - Sueldos del Personal', bs(gastos_operativos.sueldos_personal)],
+      ['   TOTAL GASTOS OPERATIVOS (C)', bs(gastos_operativos.total)],
+      ['4. RESUMEN Y UTILIDAD NETA', ''],
+      ['   Total Ingresos (A)', bs(ingresos.total)],
+      ['   Total Costos y Gastos (B + C)', bs(resumen_financiero.costo_total_general)],
+      ['   UTILIDAD / GANANCIA NETA', bs(resumen_financiero.utilidad_neta)],
+      ['   Margen de Utilidad Neta', `${resumen_financiero.margen_neto_pct}%`],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 29, 41] },
+    styles: { fontSize: 8 },
+  })
+
+  doc.save(`ganancias-y-perdidas-${periodo.desde}-${periodo.hasta}.pdf`)
+}
+
+export function exportExcelGananciasPerdidas(pl, periodo) {
+  const { ingresos, costos_mercaderia, gastos_operativos, resumen_financiero } = pl
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['BALANCE DE GANANCIAS Y PÉRDIDAS (P&L)'],
+    [`Período: ${periodo.desde} → ${periodo.hasta}`],
+    ['Generado:', hoy()],
+    [],
+    ['CONCEPTO FINANCIERO', 'MONTO (Bs.)'],
+    ['1. INGRESOS BRUTOS', ''],
+    ['   - Ingresos por Servicios (Mano de obra)', ingresos.servicios],
+    ['   - Ingresos por Reemplazos / Repuestos', ingresos.reemplazos],
+    ['   - Ingresos por Trabajos Externos', ingresos.externos],
+    ['   TOTAL INGRESOS (A)', ingresos.total],
+    [],
+    ['2. COSTOS DIRECTOS DE MERCADERÍA', ''],
+    ['   - Costo de Repuestos Vendidos', costos_mercaderia.repuestos],
+    ['   - Costo de Trabajos Externos', costos_mercaderia.externos],
+    ['   TOTAL COSTOS DIRECTOS (B)', costos_mercaderia.total],
+    [],
+    ['3. GASTOS OPERATIVOS / TALLER', ''],
+    ['   - Compras y Gastos Operativos', gastos_operativos.compras_taller],
+    ['   - Sueldos del Personal', gastos_operativos.sueldos_personal],
+    ['   TOTAL GASTOS OPERATIVOS (C)', gastos_operativos.total],
+    [],
+    ['4. RESUMEN Y UTILIDAD NETA', ''],
+    ['   Total Ingresos (A)', ingresos.total],
+    ['   Total Costos y Gastos (B + C)', resumen_financiero.costo_total_general],
+    ['   UTILIDAD / GANANCIA NETA', resumen_financiero.utilidad_neta],
+    ['   Margen de Utilidad Neta (%)', `${resumen_financiero.margen_neto_pct}%`],
+  ])
+  XLSX.utils.book_append_sheet(wb, ws, 'Ganancias y Pérdidas')
+  XLSX.writeFile(wb, `ganancias-y-perdidas-${periodo.desde}-${periodo.hasta}.xlsx`)
 }
 
 // ── Exports individuales Excel ─────────────────────────────────

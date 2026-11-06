@@ -7,6 +7,7 @@ import {
   exportPDFExternos, exportPDFCards, exportExcelCompleto,
   exportExcelResumen, exportExcelCards, exportPDFClientes,
   exportExcelClientes, exportExcelMecanicos, exportExcelInsumos, exportExcelExternos,
+  exportPDFGananciasPerdidas, exportExcelGananciasPerdidas,
 } from '../lib/exportLib'
 import toast from 'react-hot-toast'
 
@@ -193,7 +194,7 @@ export default function Reportes() {
   const cargar = useCallback(async () => {
     setLoading(true)
     toast.loading('Cargando reportes...', { id: 'loading-rep' })
-    const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
+    const [r1, r2, r3, r4, r5, r6, r7, r8] = await Promise.all([
       api.reporteResumen({ token, ...periodo }),
       api.reporteMecanicos({ token, ...periodo }),
       api.reporteInsumos({ token, ...periodo }),
@@ -201,6 +202,7 @@ export default function Reportes() {
       api.reporteCards({ token, ...periodo }),
       api.reporteClientes({ token, ...periodo }),
       api.reporteAsistencia({ token, ...periodo }),
+      api.reporteGananciasPerdidas({ token, ...periodo }),
     ])
     toast.dismiss('loading-rep')
     setLoading(false)
@@ -214,6 +216,7 @@ export default function Reportes() {
       externos:  r4.data || { lista:[], total_ingresos:0, total_costos:0, margen_total:0 },
       cards:     r5.data || [],
       asistencia: r7.data || [],
+      pl:        r8.data || null,
     })
     toast.success('Reportes actualizados')
   }, [token, periodo])
@@ -221,7 +224,7 @@ export default function Reportes() {
   const handleExcelCompleto = async () => {
     if (!data) return
     setExporting(true)
-    try { exportExcelCompleto({ ...data, clientes, asistencia, periodo }); toast.success('Excel exportado') }
+    try { exportExcelCompleto({ ...data, clientes, asistencia, pl: data.pl, periodo }); toast.success('Excel exportado') }
     catch { toast.error('Error exportando Excel') }
     setExporting(false)
   }
@@ -296,6 +299,64 @@ export default function Reportes() {
 
       {data && (
         <div>
+
+          {/* 0. GANANCIAS Y PÉRDIDAS (P&L) */}
+          <Seccion icon={TrendingUp} titulo="Balance de Ganancias y Pérdidas (P&L)" color="#f59e0b" defaultOpen={true}>
+            {data.pl ? (
+              <>
+                <div style={s.exportRow}>
+                  <button style={s.btnPDF} onClick={() => exportPDFGananciasPerdidas(data.pl, periodo)}>
+                    <FileText size={13} /> PDF Balance P&L
+                  </button>
+                  <button style={s.btnXLS} onClick={() => exportExcelGananciasPerdidas(data.pl, periodo)}>
+                    <FileSpreadsheet size={13} /> Excel Balance P&L
+                  </button>
+                </div>
+                <div style={s.kpiGrid}>
+                  <KPI label="Ingreso Bruto Total" valor={bs(data.pl.ingresos.total)} color="#10b981" />
+                  <KPI label="Costos y Gastos Total" valor={bs(data.pl.resumen_financiero.costo_total_general)} color="#ef4444" />
+                  <KPI label="Utilidad / Ganancia Neta" valor={bs(data.pl.resumen_financiero.utilidad_neta)} color={data.pl.resumen_financiero.es_ganancia ? '#10b981' : '#ef4444'} />
+                  <KPI label="Margen Neto" valor={`${data.pl.resumen_financiero.margen_neto_pct}%`} color="#3b82f6" />
+                </div>
+                <div style={{background:'var(--bg)',borderRadius:10,padding:16,border:'1px solid var(--border)'}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--text-strong)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.5px'}}>Estado de Resultados Contable</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr',gap:8,fontSize:13,lineHeight:2}}>
+                    <div style={{color:'var(--text-soft)'}}><b>(+) Ingresos por Servicios (Mano de obra)</b></div>
+                    <div style={{textAlign:'right',fontWeight:600}}>{bs(data.pl.ingresos.servicios)}</div>
+
+                    <div style={{color:'var(--text-soft)'}}><b>(+) Ingresos por Repuestos / Reemplazos</b></div>
+                    <div style={{textAlign:'right',fontWeight:600}}>{bs(data.pl.ingresos.reemplazos)}</div>
+
+                    <div style={{color:'var(--text-soft)'}}><b>(+) Ingresos por Trabajos Externos</b></div>
+                    <div style={{textAlign:'right',fontWeight:600}}>{bs(data.pl.ingresos.externos)}</div>
+
+                    <div style={{color:'var(--text-strong)',borderTop:'1px solid var(--border)',paddingTop:4}}><b>TOTAL INGRESOS (A)</b></div>
+                    <div style={{textAlign:'right',fontWeight:700,color:'var(--accent)',borderTop:'1px solid var(--border)',paddingTop:4}}>{bs(data.pl.ingresos.total)}</div>
+
+                    <div style={{color:'var(--danger)',marginTop:8}}><b>(-) Costo de Repuestos Vendidos</b></div>
+                    <div style={{textAlign:'right',color:'var(--danger)',marginTop:8}}>{bs(data.pl.costos_mercaderia.repuestos)}</div>
+
+                    <div style={{color:'var(--danger)'}}><b>(-) Costo de Trabajos Externos</b></div>
+                    <div style={{textAlign:'right',color:'var(--danger)'}}>{bs(data.pl.costos_mercaderia.externos)}</div>
+
+                    <div style={{color:'var(--danger)'}}><b>(-) Compras y Gastos Operativos del Taller</b></div>
+                    <div style={{textAlign:'right',color:'var(--danger)'}}>{bs(data.pl.gastos_operativos.compras_taller)}</div>
+
+                    <div style={{color:'var(--danger)'}}><b>(-) Sueldos del Personal</b></div>
+                    <div style={{textAlign:'right',color:'var(--danger)'}}>{bs(data.pl.gastos_operativos.sueldos_personal)}</div>
+
+                    <div style={{color:'var(--text-strong)',borderTop:'1px solid var(--border)',paddingTop:4}}><b>TOTAL COSTOS Y GASTOS (B)</b></div>
+                    <div style={{textAlign:'right',fontWeight:700,color:'var(--danger)',borderTop:'1px solid var(--border)',paddingTop:4}}>{bs(data.pl.resumen_financiero.costo_total_general)}</div>
+
+                    <div style={{color:'var(--text-strong)',fontSize:14,borderTop:'2px solid var(--border)',paddingTop:8}}><b>UTILIDAD / GANANCIA NETA (A - B)</b></div>
+                    <div style={{textAlign:'right',fontSize:15,fontWeight:800,color:data.pl.resumen_financiero.es_ganancia?'var(--success)':'var(--danger)',borderTop:'2px solid var(--border)',paddingTop:8}}>
+                      {bs(data.pl.resumen_financiero.utilidad_neta)}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : <div style={s.noData}>Cargando balance...</div>}
+          </Seccion>
 
           {/* 1. RESUMEN */}
           <Seccion icon={TrendingUp} titulo="Resumen General de Ingresos" color="#f59e0b">

@@ -94,8 +94,14 @@ function CardKanban({ card, onClick, onCambiarEstado }) {
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,alignItems:'center',gap:4,flexWrap:'wrap'}}>
         <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
           <span style={s.badge(estado?.color||'#888')}>{estado?.label||card.estado}</span>
-          <span style={s.badge(card.pagado ? '#10b981' : '#ef4444')}>
-            {card.pagado ? '✓ Pagado' : '⚠️ Pendiente'}
+          <span style={{
+            display:'inline-block', padding:'3px 9px', borderRadius:6,
+            fontSize:11, fontWeight:800,
+            background: card.pagado ? 'rgba(16,185,129,.18)' : 'rgba(239,68,68,.18)',
+            color: card.pagado ? '#10b981' : '#ef4444',
+            border: `1.5px solid ${card.pagado ? '#10b981' : '#ef4444'}`
+          }}>
+            {card.pagado ? '✓ PAGADO' : '⚠️ PENDIENTE'}
           </span>
         </div>
         <div style={{display:'flex',gap:3}} onClick={e=>e.stopPropagation()}>

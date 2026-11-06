@@ -78,10 +78,16 @@ function CardFinalizado({ card, onVer }) {
       <div style={s.cardTop}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8, gap:6, flexWrap:'wrap' }}>
           <span style={{ fontSize:11, color:'rgba(255,255,255,.5)' }}>#{card.id}</span>
-          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
             <span style={{ ...s.badge('#10b981'), background:'rgba(16,185,129,.2)', color:'#a8f1d8' }}>✓ Finalizado</span>
-            <span style={{ ...s.badge(card.pagado ? '#10b981' : '#ef4444'), background: card.pagado ? 'rgba(16,185,129,.2)' : 'rgba(239,68,68,.2)', color: card.pagado ? '#a8f1d8' : '#fca5a5' }}>
-              {card.pagado ? '✓ Pagado' : '⚠️ Pendiente'}
+            <span style={{
+              display:'inline-block', padding:'3px 10px', borderRadius:6,
+              fontSize:11, fontWeight:800,
+              background: card.pagado ? 'rgba(16,185,129,.25)' : 'rgba(239,68,68,.25)',
+              color: card.pagado ? '#a8f1d8' : '#fca5a5',
+              border: `1.5px solid ${card.pagado ? '#10b981' : '#ef4444'}`
+            }}>
+              {card.pagado ? '✓ PAGADO' : '⚠️ PENDIENTE'}
             </span>
           </div>
         </div>

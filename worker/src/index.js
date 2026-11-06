@@ -313,17 +313,47 @@ export default {
       }).select().single()
       if (error) return err(error.message)
 
-      // Si hay otros_servicios personalizados, insertarlos en servicios_realizados
+      const servicioLabels = {
+        CAMBIO_ACEITE: 'Cambio de aceite',
+        REPARACION_MOTOR: 'Reparación de motor',
+        AJUSTE_VALVULAS: 'Ajuste de válvulas',
+        LIMPIEZA_CARBURADOR: 'Limpieza de carburador',
+        LIMPIEZA_INYECTORES: 'Limpieza de inyectores',
+        CAMBIO_KIT_TRANSMISION: 'Cambio de kit de transmisión',
+        CAMBIO_PASTILLAS: 'Cambio de pastillas/zapatas',
+        PURGA_FRENOS: 'Purga de frenos',
+        REPARACION_SUSPENSION: 'Reparación de suspensión',
+        REPARACION_ELECTRICA: 'Reparación eléctrica',
+        CAMBIO_BATERIA: 'Cambio de batería',
+        ESCANEO_COMPUTARIZADO: 'Escaneo computarizado',
+        LIMPIEZA_SISTEMA_INYECCION: 'Limpieza de sistema de inyección',
+        CAMBIO_LLANTAS: 'Cambio de llantas',
+        MANTENIMIENTO_BASICO: 'Mantenimiento básico',
+        MANTENIMIENTO_COMPLETO: 'Mantenimiento completo',
+        MANTENIMIENTO_DETALLADO: 'Mantenimiento detallado',
+        RESTAURACION: 'Restauración',
+      }
+
+      const initialServicios = tipo_servicio2.map(t => ({
+        card_id: data.id,
+        nombre: servicioLabels[t] || t,
+        descripcion: 'Servicio solicitado',
+        precio: 0,
+      }))
+
       if (Array.isArray(d.otros_servicios) && d.otros_servicios.length > 0) {
-        const customServices = d.otros_servicios.filter(os => os.nombre?.trim()).map(os => ({
-          card_id: data.id,
-          nombre: os.nombre.trim(),
-          descripcion: os.descripcion?.trim() || '',
-          precio: parseFloat(os.precio) || 0,
-        }))
-        if (customServices.length > 0) {
-          await supabase.from('servicios_realizados').insert(customServices)
-        }
+        d.otros_servicios.filter(os => os.nombre?.trim()).forEach(os => {
+          initialServicios.push({
+            card_id: data.id,
+            nombre: os.nombre.trim(),
+            descripcion: os.descripcion?.trim() || '',
+            precio: parseFloat(os.precio) || 0,
+          })
+        })
+      }
+
+      if (initialServicios.length > 0) {
+        await supabase.from('servicios_realizados').insert(initialServicios)
       }
 
       await supabase.from('trabajos_realizados').insert({
@@ -757,6 +787,92 @@ export default {
         lista,
         total_gasto: lista.reduce((a,c) => a + c.costo_total, 0),
         por_categoria,
+      })
+    }
+
+    // reporte ganancias y perdidas (P&L)
+    if (path === '/reportes/ganancias-perdidas' && method === 'GET') {
+      if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
+      const desde = url.searchParams.get('desde') || '2000-01-01'
+      const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
+
+      const { data: cards } = await supabase.from('cards')
+        .select('id,estado,fecha,servicios_realizados(precio),reemplazos(precio,costo,cantidad),trabajos_externos(precio_final,costo)')
+        .gte('fecha', desde).lte('fecha', hasta)
+
+      const finCards = (cards || []).filter(c => c.estado === 'FINALIZADO')
+
+      let ingreso_servicios = 0
+      let ingreso_reemplazos = 0
+      let ingreso_externos = 0
+      let costo_reemplazos = 0
+      let costo_externos = 0
+
+      finCards.forEach(c => {
+        (c.servicios_realizados || []).forEach(s => { ingreso_servicios += (s.precio || 0) })
+        (c.reemplazos || []).forEach(r => {
+          ingreso_reemplazos += (r.precio || 0) * (r.cantidad || 1)
+          costo_reemplazos += (r.costo || 0) * (r.cantidad || 1)
+        })
+        (c.trabajos_externos || []).forEach(t => {
+          ingreso_externos += (t.precio_final || 0)
+          costo_externos += (t.costo || 0)
+        })
+      })
+
+      const ingreso_total = ingreso_servicios + ingreso_reemplazos + ingreso_externos
+
+      const { data: compras } = await supabase.from('compras')
+        .select('*')
+        .gte('fecha', desde).lte('fecha', hasta)
+
+      const total_compras = (compras || []).reduce((a, c) => a + (c.costo_total || 0), 0)
+
+      const { data: mecanicos } = await supabase.from('user_profiles')
+        .select('sueldo_semanal, tipo_sueldo').eq('rol', 'MECANICO').eq('activo', true)
+
+      let total_sueldos = 0
+      const diasPeriodo = (new Date(hasta) - new Date(desde)) / (1000 * 60 * 60 * 24) + 1
+      const semanasPeriodo = Math.max(1, diasPeriodo / 7)
+
+      (mecanicos || []).forEach(m => {
+        if (m.tipo_sueldo === 'FIJO' && m.sueldo_semanal) {
+          total_sueldos += Number(m.sueldo_semanal) * semanasPeriodo
+        }
+      })
+
+      const costo_total_mercaderia = costo_reemplazos + costo_externos
+      const gastos_operativos = total_compras + total_sueldos
+      const costo_total_general = costo_total_mercaderia + gastos_operativos
+
+      const utilidad_neta = ingreso_total - costo_total_general
+      const margen_neto_pct = ingreso_total > 0 ? Math.round((utilidad_neta / ingreso_total) * 100) : 0
+
+      return ok({
+        periodo: { desde, hasta },
+        ingresos: {
+          servicios: ingreso_servicios,
+          reemplazos: ingreso_reemplazos,
+          externos: ingreso_externos,
+          total: ingreso_total,
+        },
+        costos_mercaderia: {
+          repuestos: costo_reemplazos,
+          externos: costo_externos,
+          total: costo_total_mercaderia,
+        },
+        gastos_operativos: {
+          compras_taller: total_compras,
+          sueldos_personal: total_sueldos,
+          total: gastos_operativos,
+        },
+        resumen_financiero: {
+          ingreso_total,
+          costo_total_general,
+          utilidad_neta,
+          margen_neto_pct,
+          es_ganancia: utilidad_neta >= 0,
+        }
       })
     }
 
