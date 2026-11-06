@@ -8,7 +8,8 @@ import toast from 'react-hot-toast'
 
 const ESTADOS = [
   { key:'NUEVO',      label:'Nuevo',      color:'var(--estado-nuevo)',      next:['EN_CURSO'] },
-  { key:'EN_CURSO',   label:'En Curso',   color:'var(--estado-en-curso)',   next:['TERMINADO'] },
+  { key:'EN_CURSO',   label:'En Curso',   color:'var(--estado-en-curso)',   next:['PAUSADO','TERMINADO'] },
+  { key:'PAUSADO',    label:'Pausado',    color:'var(--estado-pausado)',    next:['EN_CURSO'] },
   { key:'TERMINADO',  label:'Terminado',  color:'var(--estado-terminado)',  next:['PRUEBAS'] },
   { key:'PRUEBAS',    label:'Pruebas',    color:'var(--estado-pruebas)',    next:['EN_CURSO','FINALIZADO'] },
   { key:'FINALIZADO', label:'Finalizado', color:'var(--estado-finalizado)', next:[] },
