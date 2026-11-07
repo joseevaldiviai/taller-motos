@@ -221,6 +221,10 @@ export default function Reportes() {
     toast.success('Reportes actualizados')
   }, [token, periodo])
 
+  useEffect(() => {
+    cargar()
+  }, [cargar])
+
   const handleExcelCompleto = async () => {
     if (!data) return
     setExporting(true)
