@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { FileText, TrendingUp, Users, Package, Wrench, BarChart2, RefreshCw, FileSpreadsheet, ChevronDown, UserCheck, Clock } from 'lucide-react'
 import { api } from '../lib/apiClient'
 import useAuthStore from '../store/authStore'
