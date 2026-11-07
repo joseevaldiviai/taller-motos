@@ -815,12 +815,16 @@ export default {
         let costo_externos = 0
 
         finCards.forEach(c => {
-          (c.servicios_realizados || []).forEach(s => { ingreso_servicios += (s.precio || 0) })
-          (c.reemplazos || []).forEach(r => {
+          const servicios = Array.isArray(c.servicios_realizados) ? c.servicios_realizados : (c.servicios_realizados ? [c.servicios_realizados] : [])
+          const reemplazos = Array.isArray(c.reemplazos) ? c.reemplazos : (c.reemplazos ? [c.reemplazos] : [])
+          const externos = Array.isArray(c.trabajos_externos) ? c.trabajos_externos : (c.trabajos_externos ? [c.trabajos_externos] : [])
+
+          servicios.forEach(s => { ingreso_servicios += (s.precio || 0) })
+          reemplazos.forEach(r => {
             ingreso_reemplazos += (r.precio || 0) * (r.cantidad || 1)
             costo_reemplazos += (r.costo || 0) * (r.cantidad || 1)
           })
-          (c.trabajos_externos || []).forEach(t => {
+          externos.forEach(t => {
             ingreso_externos += (t.precio_final || 0)
             costo_externos += (t.costo || 0)
           })
