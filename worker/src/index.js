@@ -806,7 +806,8 @@ export default {
           .gte('fecha', desde).lte('fecha', hasta)
         if (cardsErr) return err(cardsErr.message, 500)
 
-        const finCards = (cards || []).filter(c => c.estado === 'FINALIZADO')
+        const cardsList = Array.isArray(cards) ? cards : []
+        const finCards = cardsList.filter(c => c && c.estado === 'FINALIZADO')
 
         let ingreso_servicios = 0
         let ingreso_reemplazos = 0
@@ -815,18 +816,22 @@ export default {
         let costo_externos = 0
 
         finCards.forEach(c => {
-          const servicios = Array.isArray(c.servicios_realizados) ? c.servicios_realizados : (c.servicios_realizados ? [c.servicios_realizados] : [])
-          const reemplazos = Array.isArray(c.reemplazos) ? c.reemplazos : (c.reemplazos ? [c.reemplazos] : [])
-          const externos = Array.isArray(c.trabajos_externos) ? c.trabajos_externos : (c.trabajos_externos ? [c.trabajos_externos] : [])
+          const servicios = Array.isArray(c?.servicios_realizados) ? c.servicios_realizados : (c?.servicios_realizados ? [c.servicios_realizados] : [])
+          const reemplazos = Array.isArray(c?.reemplazos) ? c.reemplazos : (c?.reemplazos ? [c.reemplazos] : [])
+          const externos = Array.isArray(c?.trabajos_externos) ? c.trabajos_externos : (c?.trabajos_externos ? [c.trabajos_externos] : [])
 
-          servicios.forEach(s => { ingreso_servicios += (s.precio || 0) })
+          servicios.forEach(s => { if (s) ingreso_servicios += (s.precio || 0) })
           reemplazos.forEach(r => {
-            ingreso_reemplazos += (r.precio || 0) * (r.cantidad || 1)
-            costo_reemplazos += (r.costo || 0) * (r.cantidad || 1)
+            if (r) {
+              ingreso_reemplazos += (r.precio || 0) * (r.cantidad || 1)
+              costo_reemplazos += (r.costo || 0) * (r.cantidad || 1)
+            }
           })
           externos.forEach(t => {
-            ingreso_externos += (t.precio_final || 0)
-            costo_externos += (t.costo || 0)
+            if (t) {
+              ingreso_externos += (t.precio_final || 0)
+              costo_externos += (t.costo || 0)
+            }
           })
         })
 
@@ -837,18 +842,22 @@ export default {
           .gte('fecha', desde).lte('fecha', hasta)
         if (comprasErr) return err(comprasErr.message, 500)
 
-        const total_compras = (compras || []).reduce((a, c) => a + (c.costo_total || 0), 0)
+        const comprasList = Array.isArray(compras) ? compras : []
+        const total_compras = comprasList.reduce((a, c) => a + (c?.costo_total || 0), 0)
 
         const { data: mecanicos, error: mecErr } = await supabase.from('user_profiles')
           .select('sueldo_semanal, tipo_sueldo').eq('rol', 'MECANICO').eq('activo', true)
         if (mecErr) return err(mecErr.message, 500)
 
+        const mecList = Array.isArray(mecanicos) ? mecanicos : []
         let total_sueldos = 0
-        const diasPeriodo = (new Date(hasta) - new Date(desde)) / (1000 * 60 * 60 * 24) + 1
-        const semanasPeriodo = Math.max(1, diasPeriodo / 7)
+        const desdeMs = new Date(desde).getTime()
+        const hastaMs = new Date(hasta).getTime()
+        const diasPeriodo = (!isNaN(desdeMs) && !isNaN(hastaMs)) ? ((hastaMs - desdeMs) / (1000 * 60 * 60 * 24) + 1) : 1
+        const semanasPeriodo = diasPeriodo > 7 ? diasPeriodo / 7 : 1
 
-        (mecanicos || []).forEach(m => {
-          if (m.tipo_sueldo === 'FIJO' && m.sueldo_semanal) {
+        mecList.forEach(m => {
+          if (m && m.tipo_sueldo === 'FIJO' && m.sueldo_semanal) {
             total_sueldos += Number(m.sueldo_semanal) * semanasPeriodo
           }
         })
