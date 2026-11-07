@@ -243,6 +243,10 @@ export default {
     if (path === '/insumos' && method === 'GET') {
       const { data, error } = await supabase.from('insumos').select('*').eq('activo', true).order('nombre')
       if (error) return err(error.message)
+      if (auth.rol !== 'ADMIN') {
+        const safeData = data.map(i => ({ id: i.id, nombre: i.nombre, stock: i.stock, activo: i.activo }))
+        return ok(safeData)
+      }
       return ok(data)
     }
 

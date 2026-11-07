@@ -75,7 +75,8 @@ function ModalInsumo({ token, insumo, onClose, onSaved }) {
 }
 
 export default function Insumos() {
-  const { token } = useAuthStore()
+  const { token, esAdmin } = useAuthStore()
+  const isAdmin = esAdmin()
   const [insumos, setInsumos] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
@@ -91,6 +92,7 @@ export default function Insumos() {
   useEffect(() => { load() }, [load])
 
   const handleEliminar = async (id) => {
+    if (!isAdmin) return
     if (!confirm('¿Eliminar este insumo?')) return
     const res = await api.eliminarInsumo({ token, id })
     if (!res?.ok) { toast.error(res?.error || 'Error'); return }
@@ -107,9 +109,11 @@ export default function Insumos() {
           <div style={s.title}>📦 Inventario</div>
           <div style={s.sub}>{insumos.length} ítems en inventario</div>
         </div>
-        <button style={s.btnPrimary} onClick={() => setModal('crear')}>
-          <Plus size={14} /> Nuevo ítem
-        </button>
+        {isAdmin && (
+          <button style={s.btnPrimary} onClick={() => setModal('crear')}>
+            <Plus size={14} /> Nuevo ítem
+          </button>
+        )}
       </div>
 
       <input
@@ -130,24 +134,26 @@ export default function Insumos() {
                 onMouseOver={e => e.currentTarget.style.borderColor='var(--accent)'}
                 onMouseOut={e => e.currentTarget.style.borderColor='var(--border)'}>
                 <div style={s.cardName}>{ins.nombre}</div>
-                <div style={s.cardPrice}>Bs. {parseFloat(ins.precio).toFixed(2)}</div>
+                {isAdmin && <div style={s.cardPrice}>Bs. {parseFloat(ins.precio).toFixed(2)}</div>}
                 <div style={s.cardStock(ins.stock < 5)}>
                   {ins.stock < 5 ? '⚠️ ' : '✓ '} Stock: {ins.stock} unidades
                 </div>
-                <div style={s.actBtns}>
-                  <button style={s.iconBtn('var(--info)')} onClick={() => setModal({ insumo: ins })}>
-                    <Pencil size={12} /> Editar
-                  </button>
-                  <button style={s.iconBtn('var(--danger)')} onClick={() => handleEliminar(ins.id)}>
-                    <Trash2 size={12} /> Eliminar
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div style={s.actBtns}>
+                    <button style={s.iconBtn('var(--info)')} onClick={() => setModal({ insumo: ins })}>
+                      <Pencil size={12} /> Editar
+                    </button>
+                    <button style={s.iconBtn('var(--danger)')} onClick={() => handleEliminar(ins.id)}>
+                      <Trash2 size={12} /> Eliminar
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
       }
 
-      {(modal === 'crear' || modal?.insumo) && (
+      {isAdmin && (modal === 'crear' || modal?.insumo) && (
         <ModalInsumo
           token={token}
           insumo={modal?.insumo || null}

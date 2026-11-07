@@ -208,7 +208,7 @@ function ModalReemplazo({ token, cardId, insumos, reemplazo, onClose, onSaved })
                 <label style={s.label}>Desde catálogo de inventario</label>
                 <select style={s.select} value={form.insumo_id} onChange={e=>handleInsumo(e.target.value)}>
                   <option value="">— Seleccionar del inventario —</option>
-                  {insumos.map(i=><option key={i.id} value={i.id}>{i.nombre} — Bs. {i.precio}</option>)}
+                  {insumos.map(i=><option key={i.id} value={i.id}>{i.nombre} {isAdmin && i.precio !== undefined ? `— Bs. ${i.precio}` : ''}</option>)}
                 </select>
               </>
             )}
@@ -964,23 +964,6 @@ export default function CardDetalle() {
                     <td style={{...s.tdNum,fontWeight:700,color:'var(--accent)'}}>Bs. {ext.toFixed(2)}</td>
                     {esAdmin() && <td style={s.td}/>}
                     {puedeEditar && <td style={s.td}/>}
-                  </tr>
-                                    <Pencil size={12}/>
-                                  </button>
-                                  <button style={s.btnDanger} onClick={()=>handleEliminarExterno(t.id)}>
-                                    <Trash2 size={12}/>
-                                  </button>
-                                </div>
-                              </td>
-                          )}
-                        </tr>
-                    )
-                  })}
-                  <tr>
-                    <td colSpan={esAdmin() ? 3 : 1} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
-                    <td style={{...s.tdNum,fontWeight:700,color:'var(--accent)'}}>Bs. {ext.toFixed(2)}</td>
-                    {esAdmin() && <td style={s.td}/>}
-                    {!isFinalizado && <td style={s.td}/>}
                   </tr>
                   </tbody>
                 </table>
