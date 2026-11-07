@@ -797,87 +797,94 @@ export default {
     // reporte ganancias y perdidas (P&L)
     if (path === '/reportes/ganancias-perdidas' && method === 'GET') {
       if (auth.rol !== 'ADMIN') return err('Sin permiso', 403)
-      const desde = url.searchParams.get('desde') || '2000-01-01'
-      const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
+      try {
+        const desde = url.searchParams.get('desde') || '2000-01-01'
+        const hasta = url.searchParams.get('hasta') || new Date().toISOString().slice(0,10)
 
-      const { data: cards } = await supabase.from('cards')
-        .select('id,estado,fecha,servicios_realizados(precio),reemplazos(precio,costo,cantidad),trabajos_externos(precio_final,costo)')
-        .gte('fecha', desde).lte('fecha', hasta)
+        const { data: cards, error: cardsErr } = await supabase.from('cards')
+          .select('id,estado,fecha,servicios_realizados(precio),reemplazos(precio,costo,cantidad),trabajos_externos(precio_final,costo)')
+          .gte('fecha', desde).lte('fecha', hasta)
+        if (cardsErr) return err(cardsErr.message, 500)
 
-      const finCards = (cards || []).filter(c => c.estado === 'FINALIZADO')
+        const finCards = (cards || []).filter(c => c.estado === 'FINALIZADO')
 
-      let ingreso_servicios = 0
-      let ingreso_reemplazos = 0
-      let ingreso_externos = 0
-      let costo_reemplazos = 0
-      let costo_externos = 0
+        let ingreso_servicios = 0
+        let ingreso_reemplazos = 0
+        let ingreso_externos = 0
+        let costo_reemplazos = 0
+        let costo_externos = 0
 
-      finCards.forEach(c => {
-        (c.servicios_realizados || []).forEach(s => { ingreso_servicios += (s.precio || 0) })
-        (c.reemplazos || []).forEach(r => {
-          ingreso_reemplazos += (r.precio || 0) * (r.cantidad || 1)
-          costo_reemplazos += (r.costo || 0) * (r.cantidad || 1)
+        finCards.forEach(c => {
+          (c.servicios_realizados || []).forEach(s => { ingreso_servicios += (s.precio || 0) })
+          (c.reemplazos || []).forEach(r => {
+            ingreso_reemplazos += (r.precio || 0) * (r.cantidad || 1)
+            costo_reemplazos += (r.costo || 0) * (r.cantidad || 1)
+          })
+          (c.trabajos_externos || []).forEach(t => {
+            ingreso_externos += (t.precio_final || 0)
+            costo_externos += (t.costo || 0)
+          })
         })
-        (c.trabajos_externos || []).forEach(t => {
-          ingreso_externos += (t.precio_final || 0)
-          costo_externos += (t.costo || 0)
+
+        const ingreso_total = ingreso_servicios + ingreso_reemplazos + ingreso_externos
+
+        const { data: compras, error: comprasErr } = await supabase.from('compras')
+          .select('*')
+          .gte('fecha', desde).lte('fecha', hasta)
+        if (comprasErr) return err(comprasErr.message, 500)
+
+        const total_compras = (compras || []).reduce((a, c) => a + (c.costo_total || 0), 0)
+
+        const { data: mecanicos, error: mecErr } = await supabase.from('user_profiles')
+          .select('sueldo_semanal, tipo_sueldo').eq('rol', 'MECANICO').eq('activo', true)
+        if (mecErr) return err(mecErr.message, 500)
+
+        let total_sueldos = 0
+        const diasPeriodo = (new Date(hasta) - new Date(desde)) / (1000 * 60 * 60 * 24) + 1
+        const semanasPeriodo = Math.max(1, diasPeriodo / 7)
+
+        (mecanicos || []).forEach(m => {
+          if (m.tipo_sueldo === 'FIJO' && m.sueldo_semanal) {
+            total_sueldos += Number(m.sueldo_semanal) * semanasPeriodo
+          }
         })
-      })
 
-      const ingreso_total = ingreso_servicios + ingreso_reemplazos + ingreso_externos
+        const costo_total_mercaderia = costo_reemplazos + costo_externos
+        const gastos_operativos = total_compras + total_sueldos
+        const costo_total_general = costo_total_mercaderia + gastos_operativos
 
-      const { data: compras } = await supabase.from('compras')
-        .select('*')
-        .gte('fecha', desde).lte('fecha', hasta)
+        const utilidad_neta = ingreso_total - costo_total_general
+        const margen_neto_pct = ingreso_total > 0 ? Math.round((utilidad_neta / ingreso_total) * 100) : 0
 
-      const total_compras = (compras || []).reduce((a, c) => a + (c.costo_total || 0), 0)
-
-      const { data: mecanicos } = await supabase.from('user_profiles')
-        .select('sueldo_semanal, tipo_sueldo').eq('rol', 'MECANICO').eq('activo', true)
-
-      let total_sueldos = 0
-      const diasPeriodo = (new Date(hasta) - new Date(desde)) / (1000 * 60 * 60 * 24) + 1
-      const semanasPeriodo = Math.max(1, diasPeriodo / 7)
-
-      (mecanicos || []).forEach(m => {
-        if (m.tipo_sueldo === 'FIJO' && m.sueldo_semanal) {
-          total_sueldos += Number(m.sueldo_semanal) * semanasPeriodo
-        }
-      })
-
-      const costo_total_mercaderia = costo_reemplazos + costo_externos
-      const gastos_operativos = total_compras + total_sueldos
-      const costo_total_general = costo_total_mercaderia + gastos_operativos
-
-      const utilidad_neta = ingreso_total - costo_total_general
-      const margen_neto_pct = ingreso_total > 0 ? Math.round((utilidad_neta / ingreso_total) * 100) : 0
-
-      return ok({
-        periodo: { desde, hasta },
-        ingresos: {
-          servicios: ingreso_servicios,
-          reemplazos: ingreso_reemplazos,
-          externos: ingreso_externos,
-          total: ingreso_total,
-        },
-        costos_mercaderia: {
-          repuestos: costo_reemplazos,
-          externos: costo_externos,
-          total: costo_total_mercaderia,
-        },
-        gastos_operativos: {
-          compras_taller: total_compras,
-          sueldos_personal: total_sueldos,
-          total: gastos_operativos,
-        },
-        resumen_financiero: {
-          ingreso_total,
-          costo_total_general,
-          utilidad_neta,
-          margen_neto_pct,
-          es_ganancia: utilidad_neta >= 0,
-        }
-      })
+        return ok({
+          periodo: { desde, hasta },
+          ingresos: {
+            servicios: ingreso_servicios,
+            reemplazos: ingreso_reemplazos,
+            externos: ingreso_externos,
+            total: ingreso_total,
+          },
+          costos_mercaderia: {
+            repuestos: costo_reemplazos,
+            externos: costo_externos,
+            total: costo_total_mercaderia,
+          },
+          gastos_operativos: {
+            compras_taller: total_compras,
+            sueldos_personal: total_sueldos,
+            total: gastos_operativos,
+          },
+          resumen_financiero: {
+            ingreso_total,
+            costo_total_general,
+            utilidad_neta,
+            margen_neto_pct,
+            es_ganancia: utilidad_neta >= 0,
+          }
+        })
+      } catch (e) {
+        return err(e.message, 500)
+      }
     }
 
     // ── ASISTENCIA ────────────────────────────────────────────
