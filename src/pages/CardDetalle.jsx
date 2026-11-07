@@ -492,6 +492,61 @@ function ModalMoto({ token, card, onClose, onSaved }) {
   )
 }
 
+function ServicioRow({ token, sv, puedeEditar, onUpdated, onDelete }) {
+  const [precio, setPrecio] = useState(sv.precio)
+  const [descripcion, setDescripcion] = useState(sv.descripcion || '')
+  const [saving, setSaving] = useState(false)
+
+  const modificado = Number(precio) !== Number(sv.precio) || descripcion !== (sv.descripcion || '')
+
+  const handleUpdate = async () => {
+    setSaving(true)
+    const res = await api.actualizarServicioRealizado({
+      token,
+      id: sv.id,
+      data: { precio: parseFloat(precio) || 0, descripcion }
+    })
+    setSaving(false)
+    if (!res?.ok) { toast.error(res?.error || 'Error'); return }
+    toast.success('Servicio actualizado')
+    onUpdated()
+  }
+
+  return (
+    <tr>
+      <td style={{...s.td,fontWeight:600,color:'var(--text-strong)'}}>{sv.nombre}</td>
+      <td style={{...s.td,color:'var(--text-soft)',fontSize:12}}>
+        {!puedeEditar ? (
+          <span>{sv.descripcion || '—'}</span>
+        ) : (
+          <input style={{...s.input,margin:0,fontSize:12,padding:'4px 8px'}} value={descripcion} onChange={e=>setDescripcion(e.target.value)} placeholder="Descripción opcional..."/>
+        )}
+      </td>
+      <td style={{...s.tdNum,textAlign:'right'}}>
+        {!puedeEditar ? (
+          `Bs. ${parseFloat(sv.precio).toFixed(2)}`
+        ) : (
+          <input style={{...s.input,margin:0,width:90,textAlign:'right',fontSize:12,padding:'4px 8px'}} type="number" min="0" step="0.01" value={precio} onChange={e=>setPrecio(e.target.value)}/>
+        )}
+      </td>
+      {puedeEditar && (
+        <td style={{...s.td,textAlign:'right'}}>
+          <div style={{display:'flex',gap:5,justifyContent:'flex-end',alignItems:'center'}}>
+            {modificado && (
+              <button style={{...s.btnPrimary,fontSize:11,padding:'4px 10px'}} onClick={handleUpdate} disabled={saving}>
+                {saving ? '...' : 'Actualizar'}
+              </button>
+            )}
+            <button style={s.btnDanger} onClick={()=>onDelete(sv.id)}>
+              <Trash2 size={12}/>
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
+  )
+}
+
 function TablaVacia({ msg }) {
   return <div style={{padding:'20px 0',textAlign:'center',fontSize:13,color:'var(--text-muted)'}}>{msg}</div>
 }
@@ -585,6 +640,9 @@ export default function CardDetalle() {
   if (loading) return <div style={{padding:60,textAlign:'center',color:'var(--text-muted)'}}>Cargando…</div>
   if (!card) return null
 
+  const isAdmin = esAdmin()
+  const puedeEditar = !isFinalizado || (isAdmin && !card.pagado)
+
   return (
       <div style={s.shell}>
         <button style={s.back} onClick={()=>navigate('/tablero')}>
@@ -602,6 +660,16 @@ export default function CardDetalle() {
               <span style={s.badge(estadoInfo?.color||'#888')}>{estadoInfo?.label||card.estado}</span>
             </div>
             <div style={{display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
+              {card.estado === 'FINALIZADO' && isAdmin && (
+                  <button style={{...s.btnGhost, borderColor:'#f59e0b', color:'#f59e0b', background:'rgba(245,158,11,.08)', fontWeight:600}} onClick={async () => {
+                    if (!confirm('¿Archivar esta orden? Se ocultará de la columna de finalizados del tablero.')) return
+                    const res = await api.actualizarCard({ token, id: card.id, data: { archivado: true } })
+                    if (res?.ok) { toast.success('Orden archivada'); navigate('/tablero') }
+                    else { toast.error(res?.error || 'Error al archivar') }
+                  }}>
+                    📁 Archivar Orden
+                  </button>
+              )}
               {isFinalizado && (
                   <button style={{...s.btnGhost, borderColor:'#ef4444', color:'#ef4444', background:'rgba(239,68,68,.08)', fontWeight:600}} onClick={()=>exportPDFCardDetalle(card)}>
                     <FileText size={13}/> Imprimir Comprobante (PDF)
@@ -635,7 +703,7 @@ export default function CardDetalle() {
               <span style={s.badge('#3b82f6')}>{VEHICULO_LABEL[card.tipo_vehiculo] || 'Moto'}</span>
               <span><b>{card.moto_marca || '—'} {card.moto_modelo || ''} {card.moto_color ? `(${card.moto_color})` : ''}</b></span>
             </div>
-            {!isFinalizado && (
+            {puedeEditar && (
               <button style={{...s.btnEdit,padding:'3px 8px',fontSize:11}} onClick={()=>setModal('moto')}>
                 <Pencil size={11}/> Editar Vehículo / Cliente
               </button>
@@ -647,7 +715,7 @@ export default function CardDetalle() {
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
               <Wrench size={13} color="var(--accent)"/>
               <span style={{fontSize:13,color:'var(--text-soft)'}}>{tiposLabel || 'Sin tipo definido'}</span>
-              {!isFinalizado && (
+              {puedeEditar && (
                   <button style={{...s.btnEdit,padding:'3px 8px',fontSize:11}} onClick={()=>setEditandoTipo(v=>!v)}>
                     <Pencil size={11}/> &nbsp;{editandoTipo?'Cancelar':'Editar'}
                   </button>
@@ -745,22 +813,11 @@ export default function CardDetalle() {
         <div style={s.card}>
           <div style={s.sectionTtl}>
             <div style={s.sLabel}><CheckCircle size={14}/> Servicios Realizados</div>
-            {!isFinalizado && (
+            {puedeEditar && (
                 <button style={s.btnGhost} onClick={()=>setModal('servicio')}><Plus size={13}/> Agregar</button>
             )}
           </div>
-          {(() => {
-            const serviciosList = (card.servicios_realizados?.length > 0)
-              ? card.servicios_realizados
-              : (card.tipo_servicio || []).map((t, idx) => ({
-                  id: `virtual-${idx}`,
-                  nombre: SERVICIOS.find(s => s.value === t)?.label || t,
-                  descripcion: 'Servicio solicitado',
-                  precio: 0,
-                  isVirtual: true,
-                }))
-
-            return serviciosList.length === 0
+          {!(card.servicios_realizados?.length)
               ? <TablaVacia msg="Sin servicios registrados"/>
               : <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -768,53 +825,28 @@ export default function CardDetalle() {
                     <th style={s.th}>Servicio</th>
                     <th style={s.th}>Descripción</th>
                     <th style={{...s.th,textAlign:'right'}}>Precio</th>
-                    {!isFinalizado && <th style={s.th}></th>}
+                    {puedeEditar && <th style={s.th}></th>}
                   </tr></thead>
                   <tbody>
-                  {serviciosList.map(sv=>(
-                      <tr key={sv.id}>
-                        <td style={{...s.td,fontWeight:600,color:'var(--text-strong)'}}>{sv.nombre}</td>
-                        <td style={{...s.td,color:'var(--text-soft)',fontSize:12}}>{sv.descripcion||'—'}</td>
-                        <td style={s.tdNum}>Bs. {parseFloat(sv.precio||0).toFixed(2)}</td>
-                        {!isFinalizado && (
-                            <td style={{...s.td,textAlign:'right'}}>
-                              <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
-                                {sv.isVirtual ? (
-                                  <button style={{...s.btnPrimary,fontSize:11,padding:'4px 8px'}} onClick={async () => {
-                                    const res = await api.crearServicioRealizado({ token, data: { card_id: card.id, nombre: sv.nombre, descripcion: sv.descripcion, precio: 0 } })
-                                    if (res?.ok) { toast.success('Servicio agregado'); load() }
-                                  }}>Agregar</button>
-                                ) : (
-                                  <>
-                                    <button style={s.btnEdit} onClick={()=>{setModalData(sv);setModal('servicio-edit')}}>
-                                      <Pencil size={12}/>
-                                    </button>
-                                    <button style={s.btnDanger} onClick={()=>handleEliminarServicio(sv.id)}>
-                                      <Trash2 size={12}/>
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                        )}
-                      </tr>
+                  {card.servicios_realizados.map(sv=>(
+                      <ServicioRow key={sv.id} token={token} sv={sv} puedeEditar={puedeEditar} onUpdated={load} onDelete={handleEliminarServicio} />
                   ))}
                   <tr>
                     <td colSpan={2} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
                     <td style={{...s.tdNum,fontWeight:700}}>Bs. {serv.toFixed(2)}</td>
-                    {!isFinalizado && <td style={s.td}/>}
+                    {puedeEditar && <td style={s.td}/>}
                   </tr>
                   </tbody>
                 </table>
               </div>
-          })()}
+          }
         </div>
 
         {/* REEMPLAZOS */}
         <div style={s.card}>
           <div style={s.sectionTtl}>
             <div style={s.sLabel}><Package size={14}/> Reemplazos / Repuestos</div>
-            {!isFinalizado && (
+            {puedeEditar && (
                 <button style={s.btnGhost} onClick={()=>setModal('reemplazo')}><Plus size={13}/> Agregar</button>
             )}
           </div>
@@ -829,7 +861,7 @@ export default function CardDetalle() {
                     <th style={{...s.th,textAlign:'right'}}>Cant.</th>
                     <th style={{...s.th,textAlign:'right'}}>Subtotal</th>
                     {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Margen</th>}
-                    {!isFinalizado && <th style={s.th}></th>}
+                    {puedeEditar && <th style={s.th}></th>}
                   </tr></thead>
                   <tbody>
                   {card.reemplazos.map(r=>{
@@ -845,7 +877,7 @@ export default function CardDetalle() {
                         <td style={{...s.td,textAlign:'right',color:'var(--text-soft)'}}>x{r.cantidad}</td>
                         <td style={s.tdNum}>Bs. {pTotal.toFixed(2)}</td>
                         {esAdmin() && <td style={{...s.td,textAlign:'right'}}><span style={s.badge(margenColor)}>{margen}%</span></td>}
-                        {!isFinalizado && (
+                        {puedeEditar && (
                             <td style={{...s.td,textAlign:'right'}}>
                               <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
                                 <button style={s.btnEdit} onClick={()=>{setModalData(r);setModal('reemplazo-edit')}}>
@@ -872,7 +904,7 @@ export default function CardDetalle() {
                         return <span style={s.badge(mc)}>{m}%</span>
                       })()}</td>
                     )}
-                    {!isFinalizado && <td style={s.td}/>}
+                    {puedeEditar && <td style={s.td}/>}
                   </tr>
                   </tbody>
                 </table>
@@ -884,7 +916,7 @@ export default function CardDetalle() {
         <div style={s.card}>
           <div style={s.sectionTtl}>
             <div style={s.sLabel}><FileText size={14}/> Trabajos Externos</div>
-            {!isFinalizado && (
+            {puedeEditar && (
                 <button style={s.btnGhost} onClick={()=>setModal('externo')}><Plus size={13}/> Agregar</button>
             )}
           </div>
@@ -897,7 +929,7 @@ export default function CardDetalle() {
                     <th style={{...s.th,textAlign:'right'}}>Precio</th>
                     {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Costo</th>}
                     {esAdmin() && <th style={{...s.th,textAlign:'right'}}>Margen</th>}
-                    {!isFinalizado && <th style={s.th}></th>}
+                    {puedeEditar && <th style={s.th}></th>}
                   </tr></thead>
                   <tbody>
                   {card.trabajos_externos.map(t=>{
@@ -912,10 +944,27 @@ export default function CardDetalle() {
                               Bs. {margen.toFixed(2)}
                             </td>
                           )}
-                          {!isFinalizado && (
+                          {puedeEditar && (
                               <td style={{...s.td,textAlign:'right'}}>
                                 <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
                                   <button style={s.btnEdit} onClick={()=>{setModalData(t);setModal('externo-edit')}}>
+                                    <Pencil size={12}/>
+                                  </button>
+                                  <button style={s.btnDanger} onClick={()=>handleEliminarExterno(t.id)}>
+                                    <Trash2 size={12}/>
+                                  </button>
+                                </div>
+                              </td>
+                          )}
+                        </tr>
+                    )
+                  })}
+                  <tr>
+                    <td colSpan={esAdmin() ? 3 : 1} style={{...s.td,fontWeight:700,color:'var(--text-muted)',fontSize:11,textAlign:'right'}}>SUBTOTAL</td>
+                    <td style={{...s.tdNum,fontWeight:700,color:'var(--accent)'}}>Bs. {ext.toFixed(2)}</td>
+                    {esAdmin() && <td style={s.td}/>}
+                    {puedeEditar && <td style={s.td}/>}
+                  </tr>
                                     <Pencil size={12}/>
                                   </button>
                                   <button style={s.btnDanger} onClick={()=>handleEliminarExterno(t.id)}>

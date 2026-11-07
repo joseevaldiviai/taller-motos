@@ -377,7 +377,7 @@ export default {
     if (path.startsWith('/cards/') && method === 'PATCH' && !path.includes('/estado')) {
       const id = path.split('/')[2]
       const d = body.data || {}
-      const allowed = ['cliente_nombre','cliente_telefono','moto_marca','moto_modelo','moto_color','tipo_vehiculo','fecha','tipo_servicio','notas','pagado','metodo_pago']
+      const allowed = ['cliente_nombre','cliente_telefono','moto_marca','moto_modelo','moto_color','tipo_vehiculo','fecha','tipo_servicio','notas','pagado','metodo_pago','archivado']
       const update = Object.fromEntries(Object.entries(d).filter(([k]) => allowed.includes(k)))
       update.actualizado_en = new Date().toISOString()
       const { error } = await supabase.from('cards').update(update).eq('id', id)
