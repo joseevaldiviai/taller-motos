@@ -460,12 +460,29 @@ export default {
     // ── REEMPLAZOS ────────────────────────────────────────────
     if (path === '/reemplazos' && method === 'POST') {
       const d = body.data || {}
-      const { data, error } = await supabase.from('reemplazos').insert({
+      if (!d.card_id || !d.nombre) return err('Faltan campos: card_id, nombre')
+      const cantidad = parseFloat(d.cantidad) || 1
+      const { data: insumoExistente } = await supabase.from('insumos')
+        .select('id, stock, nombre')
+        .eq('id', d.insumo_id)
+        .maybeSingle()
+      const { data: nuevo } = await supabase.from('reemplazos').insert({
         card_id: d.card_id, insumo_id: d.insumo_id || null,
-        nombre: d.nombre, precio: d.precio, costo: d.costo || 0, cantidad: d.cantidad || 1,
+        nombre: d.nombre, precio: d.precio, costo: d.costo || 0, cantidad,
       }).select().single()
-      if (error) return err(error.message)
-      return ok(data)
+      if (!nuevo || nuevo.error) return err(nuevo?.error || 'Error al insertar el reemplazo')
+
+      // Descontar del inventario (insumos)
+      if (insumoExistente && insumoExistente.stock != null) {
+        const stockActual = Number(insumoExistente.stock)
+        const nuevoStock = stockActual - cantidad
+        if (nuevoStock < 0) {
+          await supabase.from('reemplazos').delete().eq('id', nuevo.id)
+          return err('Stock insuficiente de \'' + insumoExistente.nombre + '\' para descontar \'' + cantidad + '\'')
+        }
+        await supabase.from('insumos').update({ stock: nuevoStock }).eq('id', insumoExistente.id)
+      }
+      return ok(nuevo)
     }
 
     if (path.startsWith('/reemplazos/') && method === 'PATCH') {
@@ -483,8 +500,16 @@ export default {
 
     if (path.startsWith('/reemplazos/') && method === 'DELETE') {
       const id = path.split('/')[2]
+      const { data: rem } = await supabase.from('reemplazos').select('insumo_id, cantidad').eq('id', id).single()
+      if (!rem) return err('Reemplazo no encontrado', 404)
       const { error } = await supabase.from('reemplazos').delete().eq('id', id)
       if (error) return err(error.message)
+
+      // Devolver al inventario (insumos)
+      if (rem.insumo_id) {
+        await supabase.from('insumos').update({ stock: (Number(rem.cantidad) || 0) })
+          .eq('id', rem.insumo_id)
+      }
       return ok({ message: 'Reemplazo eliminado' })
     }
 
